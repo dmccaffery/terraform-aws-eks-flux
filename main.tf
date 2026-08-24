@@ -54,6 +54,20 @@ locals {
   registry_arn = "arn:${local.partition}:ecr:${local.registry_region}:${local.registry_owner}:repository/${local.registry_prefix}/*"
 
   addons = { for name, addon in var.addons : name => addon if addon.enabled }
+
+  # Per-add-on configuration applied when the caller passes none of their own.
+  # coredns is pinned to the system pool the same way every other platform
+  # component is. The secrets provider must delegate file writes to the CSI
+  # driver: the podless SecretSync flow (the secret-sync flux component this
+  # module's stack depends on) mounts through a fake target path that exists
+  # in no filesystem, so a provider that writes the files itself — its
+  # default — fails every sync with "open /mnt/secrets-store/<path>: no such
+  # file or directory". driverWritesSecrets makes it return the files over
+  # gRPC instead, which serves real CSI mounts and the sync controller alike.
+  addon_configuration_defaults = {
+    coredns                               = jsonencode({ nodeSelector = local.system_node_selector })
+    aws-secrets-store-csi-driver-provider = jsonencode({ driverWritesSecrets = true })
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -385,13 +399,12 @@ resource "aws_eks_addon" "main" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
 
-  # coredns is pinned to the system pool the same way every other platform
-  # component is; anything else takes the add-on's own defaults unless the
-  # caller overrides them.
+  # Module defaults (see local.addon_configuration_defaults) unless the
+  # caller overrides them; anything else takes the add-on's own defaults.
   configuration_values = (
     each.value.configuration_values != null
     ? each.value.configuration_values
-    : (each.key == "coredns" ? jsonencode({ nodeSelector = local.system_node_selector }) : null)
+    : lookup(local.addon_configuration_defaults, each.key, null)
   )
 
   tags = var.tags
