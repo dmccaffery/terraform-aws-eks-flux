@@ -331,6 +331,11 @@ run "cluster_vars_contract" {
   }
 
   assert {
+    condition     = local.reserved_cluster_vars.AGENT_EGRESS_POLICY == "cilium"
+    error_message = "the egress-policy dialect must be pinned to cilium: terraform installs the CNI, and the chart's auto probe must not be trusted where the creator knows (it also gates the broker's Pod Identity host-entity policy)"
+  }
+
+  assert {
     condition     = contains(keys(local.workload_grants), "secrets-patchy-patchy-secrets")
     error_message = "electing patchy must derive the patchy-namespace secret-reader identity (the GitHub App and anthropic syncs) rather than requiring the caller to list it"
   }

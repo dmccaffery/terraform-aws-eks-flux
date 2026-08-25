@@ -146,6 +146,16 @@ locals {
     # empty string would re-trigger the manifests' claude := default.
     AGENT_HARNESSES = coalesce(join(",", sort(var.patchy.harnesses)), "none")
 
+    # The agent-egress network-policy dialect the patchy chart renders.
+    # Terraform knows the answer for certain -- it installs Cilium as the only
+    # CNI (cilium.tf) -- so pin it rather than trusting the chart's `auto`
+    # capability probe, which the manifests themselves advise against when the
+    # creator knows (common/components/patchy/resourceset.yaml). Pinning also
+    # keeps renders deterministic and activates the broker's Cilium
+    # cloud-credentials policy (toEntities host for the EKS Pod Identity
+    # agent, which no ipBlock rule can reach under Cilium).
+    AGENT_EGRESS_POLICY = "cilium"
+
     # The evaluation-controller toggle. "true"/"false" rather than the
     # empty-string convention: it is a boolean, not an optional value, and
     # the manifests' := default ("false") covers a terraform predating the
