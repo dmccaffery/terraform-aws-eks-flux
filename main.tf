@@ -250,10 +250,16 @@ locals {
   rbac_roles = var.rbac.enabled ? {
     for role, subject in var.rbac.groups : role => subject if subject != null
   } : {}
+
+  # Only roles carrying an IAM principal get an access entry -- a role bound
+  # purely through OIDC federation (sso.kubectl) reaches its group via the
+  # groups claim dex asserts, which EKS's identity provider config resolves
+  # without any access entry at all.
+  rbac_roles_with_principal = { for role, subject in local.rbac_roles : role => subject if subject.principal_arn != null }
 }
 
 resource "aws_eks_access_entry" "rbac" {
-  for_each = local.rbac_roles
+  for_each = local.rbac_roles_with_principal
 
   cluster_name      = aws_eks_cluster.main.name
   principal_arn     = each.value.principal_arn
@@ -261,6 +267,39 @@ resource "aws_eks_access_entry" "rbac" {
   type              = "STANDARD"
 
   tags = var.tags
+}
+
+# Federates the API server itself to dex, so kubectl can authenticate humans
+# through whatever upstream connector sso.connector declares without an IAM
+# principal at all -- RBAC then binds the prefixed groups claim the same way
+# it binds an access entry's kubernetes_groups (var.rbac.groups.*.group).
+#
+# BOOTSTRAP ORDER: EKS validates the issuer's discovery endpoint at creation
+# time, and dex only exists once flux has reconciled it post-cluster-create
+# -- so this cannot be created in the same apply that first creates the
+# cluster. Land sso.kubectl.enabled = false on the first apply, then flip it
+# on once dex is live and serving over its Gateway route.
+resource "aws_eks_identity_provider_config" "dex" {
+  count = var.sso.enabled && var.sso.kubectl.enabled ? 1 : 0
+
+  cluster_name = aws_eks_cluster.main.name
+
+  oidc {
+    identity_provider_config_name = "dex"
+    issuer_url                    = "https://dex.${local.patchy_domain}"
+    client_id                     = var.sso.kubectl.client_id
+
+    username_claim  = "email"
+    username_prefix = "-"
+    groups_claim    = "groups"
+    groups_prefix   = var.sso.kubectl.groups_claim_prefix
+  }
+
+  tags = var.tags
+
+  # Doesn't guarantee dex has actually reconciled (that's flux's async job),
+  # only that this apply isn't racing the module resources dex depends on.
+  depends_on = [module.flux_operator]
 }
 
 # ---------------------------------------------------------------------------

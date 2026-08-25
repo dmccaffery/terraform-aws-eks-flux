@@ -82,7 +82,7 @@ output "gateway" {
 }
 
 output "rbac" {
-  description = "Cluster RBAC subjects (null unless rbac.enabled): each role's IAM principal and the Kubernetes group its access entry maps onto, published as the RBAC_GROUP_* cluster vars flux-manifests binds against."
+  description = "Cluster RBAC subjects (null unless rbac.enabled): each role's IAM principal (null when the role is OIDC-only) and the Kubernetes group it maps onto, published as the RBAC_GROUP_* cluster vars flux-manifests binds against."
   value = var.rbac.enabled ? {
     for role, subject in local.rbac_roles : role => {
       principal_arn = subject.principal_arn
@@ -112,5 +112,29 @@ output "sso" {
       [for secret in aws_secretsmanager_secret.flux_web_auth_config : secret.name],
       [for secret in aws_secretsmanager_secret.patchy_status_auth_config : secret.name],
     )
+  } : null
+}
+
+output "kubectl_oidc" {
+  description = <<-EOT
+    kubectl-via-dex wiring (null unless sso.kubectl.enabled): the EKS identity provider config name (null until the
+    second, post-bootstrap apply that creates it -- see sso.kubectl's bootstrap-order note) plus the issuer, client
+    id and groups prefix a kubelogin (int128/kubelogin, `kubectl oidc-login`) exec-plugin kubeconfig entry needs:
+
+      kubectl oidc-login setup \
+        --oidc-issuer-url=<issuer> \
+        --oidc-client-id=<client_id> \
+        --oidc-extra-scope=groups,email,profile
+
+    then wire the same three flags into a user's `kubectl config set-credentials --exec-command=kubectl
+    --exec-arg=oidc-login --exec-arg=get-token ...` entry. rbac.groups.*.group for a role reached this way must
+    carry groups_prefix literally, e.g. "oidc:GRP_PATCHY_NONPROD_ADMIN".
+  EOT
+  value = var.sso.enabled && var.sso.kubectl.enabled ? {
+    identity_provider_config_name = try(aws_eks_identity_provider_config.dex[0].oidc[0].identity_provider_config_name, null)
+    issuer_url                    = "https://dex.${local.patchy_domain}"
+    client_id                     = var.sso.kubectl.client_id
+    redirect_uris                 = var.sso.kubectl.redirect_uris
+    groups_claim_prefix           = var.sso.kubectl.groups_claim_prefix
   } : null
 }

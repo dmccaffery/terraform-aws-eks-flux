@@ -104,18 +104,23 @@ variable "encryption_kms_key_arn" {
 
 variable "rbac" {
   description = <<-EOT
-    Cluster RBAC subjects. Each role names an IAM principal (typically an IAM Identity Center permission-set role ARN)
-    and the Kubernetes group its access entry maps to. The group names are published as RBAC_GROUP_<ROLE> cluster vars,
-    which flux-manifests' rbac component binds Role/ClusterRoleBindings against — the manifests contract carries only
-    group names, never the IAM subjects behind them.
+    Cluster RBAC subjects. Each role names the Kubernetes group its access entry (or OIDC federation) maps to. The
+    group names are published as RBAC_GROUP_<ROLE> cluster vars, which flux-manifests' rbac component binds
+    Role/ClusterRoleBindings against — the manifests contract carries only group names, never the subject type
+    behind them.
+    principal_arn is optional: set it for an IAM Identity Center permission-set role (or any IAM role/user) that
+    should get an EKS access entry mapping it onto the group. Leave it null when the group is populated purely
+    through OIDC federation instead (sso.kubectl) — no access entry is created, and the group name only ever
+    reaches Kubernetes via the groups claim dex asserts. A role can rely on both mechanisms at once by giving the
+    IAM principal and the OIDC-asserted group the same literal group name.
   EOT
   type = object({
     enabled = optional(bool, false)
     groups = optional(object({
-      viewers    = optional(object({ principal_arn = string, group = optional(string, "platform:viewers") }))
-      developers = optional(object({ principal_arn = string, group = optional(string, "platform:developers") }))
-      devops     = optional(object({ principal_arn = string, group = optional(string, "platform:devops") }))
-      admins     = optional(object({ principal_arn = string, group = optional(string, "platform:admins") }))
+      viewers    = optional(object({ principal_arn = optional(string), group = optional(string, "platform:viewers") }))
+      developers = optional(object({ principal_arn = optional(string), group = optional(string, "platform:developers") }))
+      devops     = optional(object({ principal_arn = optional(string), group = optional(string, "platform:devops") }))
+      admins     = optional(object({ principal_arn = optional(string), group = optional(string, "platform:admins") }))
     }), {})
   })
   nullable = false
@@ -129,9 +134,9 @@ variable "rbac" {
   validation {
     condition = alltrue([
       for role in values(var.rbac.groups) :
-      role == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/", role.principal_arn))
+      role == null || role.principal_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/", role.principal_arn))
     ])
-    error_message = "Each rbac.groups entry's principal_arn must be an IAM role or user ARN."
+    error_message = "Each rbac.groups entry's principal_arn, when set, must be an IAM role or user ARN."
   }
 }
 
@@ -610,6 +615,19 @@ variable "sso" {
     just version, the client secret's rotation counter (absent clients sit at 1): bump it to mint a new client secret;
     the raw dex-client-* secret and any config document embedding the same value rewrite in one apply, so the pair
     cannot drift (then restart dex: it reads client secrets from env at startup).
+    kubectl federates the EKS API server itself to dex (an aws_eks_identity_provider_config), so kubectl can
+    authenticate humans through Okta/whatever upstream connector without an IAM principal at all -- pair it with an
+    rbac.groups entry that has no principal_arn, just the OIDC-asserted group name. client_id names dex's PUBLIC
+    static client for this flow (no secret: kubectl's OIDC device/PKCE flow can't hold one), rendered by
+    flux-manifests' dex component once elected. groups_claim_prefix is prepended to every group dex asserts before
+    the API server evaluates RBAC (AWS requires a non-empty prefix, so a spoofed claim can't collide with system:
+    or IAM-sourced group names) -- an rbac.groups.*.group value reached this way must carry the same prefix
+    literally, e.g. group = "oidc:GRP_PATCHY_NONPROD_ADMIN" when groups_claim_prefix is the default "oidc:".
+    BOOTSTRAP ORDER: unlike the dex relying parties above, the identity provider config is validated by the EKS API
+    at creation time -- it calls the issuer's discovery endpoint. On a cluster's first apply dex isn't deployed yet
+    (flux installs it after the cluster exists), so this resource can only be created once dex is live and serving
+    over its Gateway route: expect a first apply with sso.kubectl.enabled = false, then a second apply once flux
+    has converged to turn it on.
   EOT
   # config is bare any, NOT map(any): map(any) unifies the map's value
   # types, so a mixed-type config ({clientID = "$...",
@@ -632,6 +650,12 @@ variable "sso" {
     clients = optional(map(object({
       version = number
     })), {})
+    kubectl = optional(object({
+      enabled             = optional(bool, false)
+      client_id           = optional(string, "kubectl-oidc")
+      redirect_uris       = optional(list(string), ["http://localhost:8000/callback"])
+      groups_claim_prefix = optional(string, "oidc:")
+    }), {})
   })
   nullable = false
   default  = {}
@@ -644,6 +668,16 @@ variable "sso" {
   validation {
     condition     = !var.sso.enabled || var.sso.connector != null
     error_message = "sso.enabled requires sso.connector -- a dex deployment with no upstream connector is a footgun (nobody can authenticate)."
+  }
+
+  validation {
+    condition     = var.sso.enabled || !var.sso.kubectl.enabled
+    error_message = "sso.kubectl.enabled requires sso.enabled -- kubectl cannot federate to a dex that isn't deployed."
+  }
+
+  validation {
+    condition     = var.sso.kubectl.groups_claim_prefix != ""
+    error_message = "sso.kubectl.groups_claim_prefix must be non-empty -- EKS requires a groups prefix on OIDC identity provider configs, to keep an asserted claim from colliding with system: or IAM-sourced group names."
   }
 
   validation {

@@ -172,6 +172,18 @@ locals {
       for id, c in local.dex_connectors : merge({ id = id }, c)
     ]) : "[]"
 
+    # kubectl-via-dex: whether the dex component renders a PUBLIC static
+    # client (no secret) for the OIDC/PKCE flow kubelogin drives, its client
+    # id and the redirect URIs it must register verbatim. "true"/"false"
+    # rather than the empty-string convention -- same reasoning as
+    # PATCHY_EVALUATION, it's a boolean the manifests branch on directly.
+    # The identity provider config trusting these tokens at the API server
+    # is created straight from var.sso.kubectl in main.tf, not published
+    # here -- there is nothing for the manifests to do with it.
+    KUBECTL_OIDC_ENABLED       = var.sso.enabled && var.sso.kubectl.enabled ? "true" : "false"
+    KUBECTL_OIDC_CLIENT_ID     = var.sso.kubectl.client_id
+    KUBECTL_OIDC_REDIRECT_URIS = join(",", var.sso.kubectl.redirect_uris)
+
     # --- Karpenter -------------------------------------------------------
     # Wiring the component needs to render its EC2NodeClass/NodePool.
     KARPENTER_NODE_ROLE          = aws_iam_role.karpenter_node.name

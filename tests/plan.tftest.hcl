@@ -831,6 +831,113 @@ run "rbac_access_entries" {
   }
 }
 
+run "rbac_oidc_only_role_gets_no_access_entry" {
+  command = plan
+
+  variables {
+    rbac = {
+      enabled = true
+      groups = {
+        admins = { group = "oidc:GRP_PATCHY_NONPROD_ADMIN" }
+      }
+    }
+  }
+
+  # A role with no principal_arn is federated purely through OIDC (sso.kubectl)
+  # -- it must still publish its group so the manifests bind it, but it must
+  # never get an IAM access entry, which requires a principal.
+  assert {
+    condition     = length(aws_eks_access_entry.rbac) == 0
+    error_message = "a role with no principal_arn must not get an access entry"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.RBAC_GROUP_ADMINS == "oidc:GRP_PATCHY_NONPROD_ADMIN"
+    error_message = "an OIDC-only role's group must still publish to RBAC_GROUP_* for the manifests to bind"
+  }
+}
+
+run "kubectl_oidc_federation" {
+  command = plan
+
+  variables {
+    dns = {
+      zone_name  = "patchy.bitwisemedia.co.uk"
+      acme_email = "platform@bitwisemedia.co.uk"
+    }
+    sso = {
+      enabled = true
+      connector = {
+        id   = "okta"
+        type = "oidc"
+      }
+      kubectl = {
+        enabled = true
+      }
+    }
+  }
+
+  assert {
+    condition     = length(aws_eks_identity_provider_config.dex) == 1
+    error_message = "sso.kubectl.enabled must create exactly one identity provider config"
+  }
+
+  assert {
+    condition     = aws_eks_identity_provider_config.dex[0].oidc[0].issuer_url == "https://dex.patchy.bitwisemedia.co.uk"
+    error_message = "the identity provider config must trust the same dex issuer the web relying parties use"
+  }
+
+  assert {
+    condition     = aws_eks_identity_provider_config.dex[0].oidc[0].groups_prefix == "oidc:"
+    error_message = "groups_claim_prefix must default to a non-empty prefix so an asserted claim can't collide with system: or IAM-sourced group names"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.KUBECTL_OIDC_ENABLED == "true"
+    error_message = "enabling kubectl OIDC must publish KUBECTL_OIDC_ENABLED as the literal \"true\" so the dex component renders the public static client"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.KUBECTL_OIDC_CLIENT_ID == "kubectl-oidc"
+    error_message = "client_id must default to kubectl-oidc"
+  }
+}
+
+run "kubectl_oidc_requires_sso" {
+  command = plan
+
+  variables {
+    sso = {
+      kubectl = { enabled = true }
+    }
+  }
+
+  expect_failures = [var.sso]
+}
+
+run "kubectl_oidc_groups_prefix_must_be_nonempty" {
+  command = plan
+
+  variables {
+    dns = {
+      zone_name  = "patchy.bitwisemedia.co.uk"
+      acme_email = "platform@bitwisemedia.co.uk"
+    }
+    sso = {
+      enabled = true
+      connector = {
+        type = "google"
+      }
+      kubectl = {
+        enabled             = true
+        groups_claim_prefix = ""
+      }
+    }
+  }
+
+  expect_failures = [var.sso]
+}
+
 run "direct_store_reads_expose_principals" {
   command = plan
 
