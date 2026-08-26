@@ -328,7 +328,7 @@ run "cluster_vars_contract" {
   # fails on an absent value.
   assert {
     condition = alltrue([
-      for key in ["DNS_ZONE_NAME", "DNS_ZONE_ID", "DNS_DOMAIN", "PATCHY_DOMAIN", "ACME_EMAIL", "OTEL_AMP_ENDPOINT", "SIGNED_IDENTITY_KMS_KEY", "COSIGN_PUBLIC_KEY"] :
+      for key in ["DNS_ZONE_NAME", "DNS_ZONE_ID", "DNS_PUBLIC_ZONE_ID", "DNS_PRIVATE_ZONE_ID", "DNS_DOMAIN", "PATCHY_DOMAIN", "ACME_EMAIL", "OTEL_AMP_ENDPOINT", "SIGNED_IDENTITY_KMS_KEY", "COSIGN_PUBLIC_KEY"] :
       local.reserved_cluster_vars[key] == ""
     ])
     error_message = "unset optional surfaces must publish empty strings, not null"
@@ -615,6 +615,11 @@ run "dns_and_gateway_surface" {
     error_message = "the DNS surface must bring the Route53 grants with it"
   }
 
+  assert {
+    condition     = local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID == local.reserved_cluster_vars.DNS_ZONE_ID && local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID == ""
+    error_message = "with only the public flavour, its id is both the primary and the sole per-flavour id"
+  }
+
   # One EIP per public subnet the Gateway's NLB spans — an NLB requirement, not
   # a per-host one. Every HTTPRoute hostname shares them.
   assert {
@@ -645,6 +650,11 @@ run "dns_split_horizon" {
     condition     = local.dns_zone_kinds[0] == "public"
     error_message = "the public zone must stay primary (DNS_ZONE_ID, dns output) when both flavours exist"
   }
+
+  assert {
+    condition     = local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID != "" && local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID != ""
+    error_message = "split-horizon must publish both per-flavour zone ids so external-dns filters to exactly the pair"
+  }
 }
 
 run "dns_private_only" {
@@ -667,6 +677,11 @@ run "dns_private_only" {
   assert {
     condition     = local.reserved_cluster_vars.DNS_ZONE_ID != "" && local.reserved_cluster_vars.DNS_DOMAIN == "patchy.bitwisemedia.co.uk"
     error_message = "the private zone must drive the DNS cluster vars when it is the only flavour"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID == local.reserved_cluster_vars.DNS_ZONE_ID && local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID == ""
+    error_message = "with only the private flavour, its id is both the primary and the sole per-flavour id"
   }
 }
 

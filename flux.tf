@@ -83,14 +83,18 @@ locals {
 
     # DNS/TLS surface (empty when var.dns.zone_name is unset). DNS_ZONE_ID is
     # the primary Route53 hosted zone id (public when that flavour is enabled,
-    # else private). Under split-horizon both flavours share the zone name and
-    # external-dns publishes to each, so manifests must match on
-    # DNS_ZONE_NAME (the cloud-neutral key of the pair), not filter on the id.
-    DNS_ZONE_NAME = var.dns.zone_name != null ? var.dns.zone_name : ""
-    DNS_ZONE_ID   = local.dns_zone_id != null ? local.dns_zone_id : ""
-    DNS_DOMAIN    = var.dns.zone_name != null ? local.dns_domain : ""
-    PATCHY_DOMAIN = var.dns.zone_name != null ? local.patchy_domain : ""
-    ACME_EMAIL    = var.dns.acme_email != null ? var.dns.acme_email : ""
+    # else private) — the single-zone answer cert-manager's DNS-01 solver
+    # wants. Under split-horizon both flavours share the zone name and
+    # external-dns publishes the same records into each, so the per-flavour
+    # ids ride alongside (empty when that flavour is off) for its
+    # zoneIdFilters to enumerate exactly the pair.
+    DNS_ZONE_NAME       = var.dns.zone_name != null ? var.dns.zone_name : ""
+    DNS_ZONE_ID         = local.dns_zone_id != null ? local.dns_zone_id : ""
+    DNS_PUBLIC_ZONE_ID  = try(data.aws_route53_zone.cluster["public"].zone_id, "")
+    DNS_PRIVATE_ZONE_ID = try(data.aws_route53_zone.cluster["private"].zone_id, "")
+    DNS_DOMAIN          = var.dns.zone_name != null ? local.dns_domain : ""
+    PATCHY_DOMAIN       = var.dns.zone_name != null ? local.patchy_domain : ""
+    ACME_EMAIL          = var.dns.acme_email != null ? var.dns.acme_email : ""
 
     # The Gateway's reserved addresses. The gateway component annotates the
     # Cilium Gateway's LoadBalancer Service with the allocation ids; the IPs
