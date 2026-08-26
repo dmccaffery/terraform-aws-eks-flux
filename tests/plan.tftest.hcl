@@ -328,7 +328,7 @@ run "cluster_vars_contract" {
   # fails on an absent value.
   assert {
     condition = alltrue([
-      for key in ["DNS_ZONE_NAME", "DNS_ZONE_ID", "DNS_PUBLIC_ZONE_ID", "DNS_PRIVATE_ZONE_ID", "DNS_DOMAIN", "PATCHY_DOMAIN", "ACME_EMAIL", "OTEL_AMP_ENDPOINT", "SIGNED_IDENTITY_KMS_KEY", "COSIGN_PUBLIC_KEY"] :
+      for key in ["DNS_ZONE_NAME", "DNS_PUBLIC_ZONE_ID", "DNS_PRIVATE_ZONE_ID", "DNS_DOMAIN", "PATCHY_DOMAIN", "ACME_EMAIL", "OTEL_AMP_ENDPOINT", "SIGNED_IDENTITY_KMS_KEY", "COSIGN_PUBLIC_KEY"] :
       local.reserved_cluster_vars[key] == ""
     ])
     error_message = "unset optional surfaces must publish empty strings, not null"
@@ -616,8 +616,8 @@ run "dns_and_gateway_surface" {
   }
 
   assert {
-    condition     = local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID == local.reserved_cluster_vars.DNS_ZONE_ID && local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID == ""
-    error_message = "with only the public flavour, its id is both the primary and the sole per-flavour id"
+    condition     = local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID != "" && local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID == ""
+    error_message = "the public zone is unconditional with dns.zone_name, and the private id stays empty without the split-horizon election"
   }
 
   # One EIP per public subnet the Gateway's NLB spans — an NLB requirement, not
@@ -625,6 +625,11 @@ run "dns_and_gateway_surface" {
   assert {
     condition     = length(aws_eip.gateway) == length(var.network.public_subnet_ids)
     error_message = "one Gateway address must be reserved per public subnet"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.GATEWAY_NLB_SCHEME == "internet-facing" && local.reserved_cluster_vars.GATEWAY_SUBNETS == "subnet-0ccc,subnet-0ddd"
+    error_message = "the default Gateway is an internet-facing NLB on the public subnets"
   }
 }
 
@@ -648,7 +653,7 @@ run "dns_split_horizon" {
 
   assert {
     condition     = local.dns_zone_kinds[0] == "public"
-    error_message = "the public zone must stay primary (DNS_ZONE_ID, dns output) when both flavours exist"
+    error_message = "the public zone is unconditional — it must lead the flavour list, private riding alongside by election"
   }
 
   assert {
@@ -657,46 +662,54 @@ run "dns_split_horizon" {
   }
 }
 
-run "dns_private_only" {
+run "gateway_private" {
   command = plan
 
   variables {
     dns = {
       zone_name    = "patchy.bitwisemedia.co.uk"
-      public_zone  = false
       private_zone = true
       acme_email   = "platform@bitwisemedia.co.uk"
+    }
+    gateway = {
+      private = true
     }
   }
 
   assert {
-    condition     = length(data.aws_route53_zone.cluster) == 1 && local.dns_zone_kinds[0] == "private"
-    error_message = "a fully internal deployment must look up only the private zone"
+    condition     = local.reserved_cluster_vars.GATEWAY_NLB_SCHEME == "internal" && local.reserved_cluster_vars.GATEWAY_SUBNETS == "subnet-0aaa,subnet-0bbb"
+    error_message = "a private Gateway must be an internal NLB spanning the node subnets"
   }
 
+  # Internal NLBs cannot carry Elastic IPs: the reservation must go inert and
+  # the manifests gate the eip-allocations annotation absent on the empty var.
   assert {
-    condition     = local.reserved_cluster_vars.DNS_ZONE_ID != "" && local.reserved_cluster_vars.DNS_DOMAIN == "patchy.bitwisemedia.co.uk"
-    error_message = "the private zone must drive the DNS cluster vars when it is the only flavour"
+    condition     = length(aws_eip.gateway) == 0 && local.reserved_cluster_vars.GATEWAY_EIP_ALLOCATIONS == ""
+    error_message = "a private Gateway must reserve no EIPs and publish an empty GATEWAY_EIP_ALLOCATIONS"
   }
 
+  # Even a fully internal cluster keeps the public zone: cert-manager's DNS-01
+  # challenges resolve over public DNS.
   assert {
-    condition     = local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID == local.reserved_cluster_vars.DNS_ZONE_ID && local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID == ""
-    error_message = "with only the private flavour, its id is both the primary and the sole per-flavour id"
+    condition     = local.reserved_cluster_vars.DNS_PUBLIC_ZONE_ID != "" && local.reserved_cluster_vars.DNS_PRIVATE_ZONE_ID != ""
+    error_message = "a private Gateway rides split-horizon: both zone flavours must publish their ids"
   }
 }
 
-run "dns_requires_a_zone_flavour" {
+run "gateway_private_requires_private_zone" {
   command = plan
 
   variables {
     dns = {
-      zone_name   = "patchy.bitwisemedia.co.uk"
-      public_zone = false
-      acme_email  = "platform@bitwisemedia.co.uk"
+      zone_name  = "patchy.bitwisemedia.co.uk"
+      acme_email = "platform@bitwisemedia.co.uk"
+    }
+    gateway = {
+      private = true
     }
   }
 
-  expect_failures = [var.dns]
+  expect_failures = [var.gateway]
 }
 
 run "sso_surface" {
