@@ -63,13 +63,14 @@ output "platform_registry" {
 }
 
 output "dns" {
-  description = "Delegated zone wiring (null when dns.zone_name is unset): zone name, hosted zone id, apex domain, served host and the zone's name servers."
+  description = "Delegated zone wiring (null when dns.zone_name is unset): zone name, primary hosted zone id plus the per-flavour ids, apex domain, served host and the public zone's name servers (null when the public flavour is off)."
   value = var.dns.zone_name == null ? null : {
     zone_name    = var.dns.zone_name
     zone_id      = local.dns_zone_id
+    zone_ids     = { for kind, zone in data.aws_route53_zone.cluster : kind => zone.zone_id }
     domain       = local.dns_domain
     host         = local.patchy_domain
-    name_servers = data.aws_route53_zone.cluster["true"].name_servers
+    name_servers = try(data.aws_route53_zone.cluster["public"].name_servers, null)
   }
 }
 

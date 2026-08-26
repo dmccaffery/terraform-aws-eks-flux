@@ -357,12 +357,17 @@ variable "dns" {
   description = <<-EOT
     Existing delegated Route53 hosted zone (created upstream; never owned here, so cluster destroy/recreate never
     touches the zone or its NS delegation). zone_name enables the DNS/TLS surface: the external-dns + cert-manager
-    grants and the DNS_* / PATCHY_DOMAIN cluster vars. host optionally narrows the served host below the zone apex.
+    grants and the DNS_* / PATCHY_DOMAIN cluster vars. public_zone / private_zone select which flavour(s) of the
+    zone the cluster publishes records to — both for split-horizon (a private zone associated with the cluster VPC
+    shadows the public one, so in-VPC resolution needs its own records), private only for a fully internal
+    deployment. host optionally narrows the served host below the zone apex.
   EOT
   type = object({
-    zone_name  = optional(string)
-    host       = optional(string)
-    acme_email = optional(string)
+    zone_name    = optional(string)
+    public_zone  = optional(bool, true)
+    private_zone = optional(bool, false)
+    host         = optional(string)
+    acme_email   = optional(string)
   })
   nullable = false
   default  = {}
@@ -370,6 +375,11 @@ variable "dns" {
   validation {
     condition     = var.dns.zone_name == null || var.dns.acme_email != null
     error_message = "dns.acme_email is required when dns.zone_name is set (Let's Encrypt registration for the cert-manager issuers)."
+  }
+
+  validation {
+    condition     = var.dns.zone_name == null || var.dns.public_zone || var.dns.private_zone
+    error_message = "At least one of dns.public_zone or dns.private_zone must be true when dns.zone_name is set."
   }
 }
 

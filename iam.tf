@@ -74,7 +74,9 @@ data "aws_iam_policy_document" "irsa_assume_role" {
 }
 
 locals {
-  route53_zone_arn = var.dns.zone_name != null ? "arn:${local.partition}:route53:::hostedzone/${local.dns_zone_id}" : null
+  route53_zone_arns = [
+    for zone in data.aws_route53_zone.cluster : "arn:${local.partition}:route53:::hostedzone/${zone.zone_id}"
+  ]
 
   secret_arn_pattern = "arn:${local.partition}:secretsmanager:${data.aws_region.current.region}:${local.account_id}:secret:${local.secret_prefix}*"
 
@@ -178,7 +180,7 @@ data "aws_iam_policy_document" "route53" {
     sid       = "ChangeRecords"
     effect    = "Allow"
     actions   = ["route53:ChangeResourceRecordSets"]
-    resources = [local.route53_zone_arn]
+    resources = local.route53_zone_arns
   }
 
   statement {

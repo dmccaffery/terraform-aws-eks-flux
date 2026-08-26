@@ -623,6 +623,67 @@ run "dns_and_gateway_surface" {
   }
 }
 
+run "dns_split_horizon" {
+  command = plan
+
+  variables {
+    dns = {
+      zone_name    = "patchy.bitwisemedia.co.uk"
+      private_zone = true
+      acme_email   = "platform@bitwisemedia.co.uk"
+    }
+  }
+
+  # A private zone associated with the cluster VPC shadows the public one for
+  # in-VPC resolution, so external-dns must be able to write records into both.
+  assert {
+    condition     = length(data.aws_route53_zone.cluster) == 2 && length(local.route53_zone_arns) == 2
+    error_message = "enabling both zone flavours must look up both zones and grant record writes on each"
+  }
+
+  assert {
+    condition     = local.dns_zone_kinds[0] == "public"
+    error_message = "the public zone must stay primary (DNS_ZONE_ID, dns output) when both flavours exist"
+  }
+}
+
+run "dns_private_only" {
+  command = plan
+
+  variables {
+    dns = {
+      zone_name    = "patchy.bitwisemedia.co.uk"
+      public_zone  = false
+      private_zone = true
+      acme_email   = "platform@bitwisemedia.co.uk"
+    }
+  }
+
+  assert {
+    condition     = length(data.aws_route53_zone.cluster) == 1 && local.dns_zone_kinds[0] == "private"
+    error_message = "a fully internal deployment must look up only the private zone"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.DNS_ZONE_ID != "" && local.reserved_cluster_vars.DNS_DOMAIN == "patchy.bitwisemedia.co.uk"
+    error_message = "the private zone must drive the DNS cluster vars when it is the only flavour"
+  }
+}
+
+run "dns_requires_a_zone_flavour" {
+  command = plan
+
+  variables {
+    dns = {
+      zone_name   = "patchy.bitwisemedia.co.uk"
+      public_zone = false
+      acme_email  = "platform@bitwisemedia.co.uk"
+    }
+  }
+
+  expect_failures = [var.dns]
+}
+
 run "sso_surface" {
   command = plan
 

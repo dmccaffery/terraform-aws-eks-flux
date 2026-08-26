@@ -82,8 +82,10 @@ locals {
     FLUX_SYNC_CHANNEL         = var.flux.sync.ref
 
     # DNS/TLS surface (empty when var.dns.zone_name is unset). DNS_ZONE_ID is
-    # the Route53 hosted zone id external-dns filters on; DNS_ZONE_NAME keeps
-    # the human-facing name (the cloud-neutral key of the pair).
+    # the primary Route53 hosted zone id (public when that flavour is enabled,
+    # else private). Under split-horizon both flavours share the zone name and
+    # external-dns publishes to each, so manifests must match on
+    # DNS_ZONE_NAME (the cloud-neutral key of the pair), not filter on the id.
     DNS_ZONE_NAME = var.dns.zone_name != null ? var.dns.zone_name : ""
     DNS_ZONE_ID   = local.dns_zone_id != null ? local.dns_zone_id : ""
     DNS_DOMAIN    = var.dns.zone_name != null ? local.dns_domain : ""
