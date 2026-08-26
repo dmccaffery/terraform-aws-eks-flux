@@ -113,6 +113,17 @@ locals {
     # := default ("true") covers a terraform predating the key.
     GATEWAY_API_CRDS = var.gateway.install_crds ? "true" : "false"
 
+    # The stack's cilium component adopts helm_release.cilium by name
+    # (cilium.tf) and needs the two values that release computes from this
+    # cluster's own infrastructure rather than from a chart default:
+    # k8sServiceHost (kube-proxy replacement's direct route to the API
+    # server) and eni.subnetIDsFilter (which subnets the operator pulls pod
+    # ENIs from). Neither can be hardcoded in the manifests, and unlike the
+    # rest of this map's optional surfaces, Cilium cannot run without them —
+    # no empty-string convention.
+    CILIUM_K8S_SERVICE_HOST = local.cluster_endpoint_host
+    CILIUM_POD_SUBNET_IDS   = jsonencode(sort(tolist(local.pod_subnet_ids)))
+
     # Where the otel-collector writes telemetry. CloudWatch and X-Ray in this
     # account always; AMP only when a workspace endpoint is configured.
     OTEL_REGION       = data.aws_region.current.region

@@ -50,6 +50,7 @@ mock_provider "aws" {
       public_key_pem = "-----BEGIN PUBLIC KEY-----\nMOCK\n-----END PUBLIC KEY-----\n"
     }
   }
+
 }
 
 mock_provider "helm" {}
@@ -290,6 +291,24 @@ run "workload_identity_is_pod_identity" {
 run "cluster_vars_contract" {
   command = plan
 
+  # aws_eks_cluster.main.endpoint is otherwise unknown until apply (it's a
+  # brand-new resource in this plan, not a data source); override it and
+  # pull the override forward into the plan phase so the
+  # CILIUM_K8S_SERVICE_HOST assertion below can check the https:// strip
+  # exactly, rather than just its shape.
+  override_resource {
+    target          = aws_eks_cluster.main
+    override_during = plan
+    values = {
+      endpoint = "https://ABCDEF0123456789ABCDEF0123456789ABCDEF01.gr7.eu-west-2.eks.amazonaws.com"
+      identity = [{
+        oidc = [{
+          issuer = "https://oidc.eks.eu-west-2.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE"
+        }]
+      }]
+    }
+  }
+
   assert {
     condition     = local.reserved_cluster_vars.OCI_PROVIDER == "aws" && local.reserved_cluster_vars.ARTIFACT_TAG_PROVIDER == "ECRArtifactTag"
     error_message = "the flux controllers resolve ECR credentials via the aws OCI provider and the ECRArtifactTag RSIP type"
@@ -358,6 +377,16 @@ run "cluster_vars_contract" {
   assert {
     condition     = local.reserved_cluster_vars.GATEWAY_API_CRDS == "true"
     error_message = "gateway.install_crds defaults on: EKS ships no Gateway API CRDs, so the manifests must install them"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.CILIUM_K8S_SERVICE_HOST == "ABCDEF0123456789ABCDEF0123456789ABCDEF01.gr7.eu-west-2.eks.amazonaws.com"
+    error_message = "CILIUM_K8S_SERVICE_HOST must be the bare endpoint hostname (the https:// scheme stripped) -- the chart's k8sServiceHost value takes a host, not a URL"
+  }
+
+  assert {
+    condition     = local.reserved_cluster_vars.CILIUM_POD_SUBNET_IDS == jsonencode(["subnet-0aaa", "subnet-0bbb"])
+    error_message = "without network.pod_subnet_ids, the cilium component's eni.subnetIDsFilter must narrow to node_subnet_ids, JSON-encoded and sorted"
   }
 
   # The claude runner's model provider (patchy's egress-broker) defaults to

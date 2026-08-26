@@ -140,6 +140,7 @@ AWS-specific:
 | `GATEWAY_EIP_ALLOCATIONS`, `GATEWAY_SUBNETS`       | bound to the Gateway's NLB by annotation                 |
 | `GATEWAY_NLB_TARGET_TYPE`                          | `instance` — see the caveat below                        |
 | `GATEWAY_API_CRDS`                                 | `gateway.install_crds`, default `"true"` — see the caveat below |
+| `CILIUM_K8S_SERVICE_HOST`, `CILIUM_POD_SUBNET_IDS` | the two `local.cilium_values` (`cilium.tf`) that are cluster-specific rather than fixed chart defaults — the stack's `cilium` component reproduces the rest verbatim and needs these to avoid diffing them away on adoption. The latter is JSON-encoded (a cluster var is a flat string) |
 | `OCI_PROVIDER`, `ARTIFACT_TAG_PROVIDER`            | `aws` / `ECRArtifactTag` — registry auth and tag-listing dialects (the google tree relies on the manifests' gcp defaults instead) |
 | `OTEL_REGION`, `OTEL_AMP_ENDPOINT`                 | CloudWatch/X-Ray always; AMP when configured             |
 | `SIGNED_IDENTITY_KMS_KEY`                          | the KMS signing key ARN (empty in keyless mode, when the `SIGNED_IDENTITY_*` subjects are set instead) |
