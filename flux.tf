@@ -81,27 +81,30 @@ locals {
     SIGNED_IDENTITY_MANIFESTS = local.signing_kms ? "" : var.signed_identity.manifests_subject
     FLUX_SYNC_CHANNEL         = var.flux.sync.ref
 
-    # DNS/TLS surface (empty when var.dns.zone_name is unset). DNS_ZONE_ID is
-    # the primary Route53 hosted zone id (public when that flavour is enabled,
-    # else private) — the single-zone answer cert-manager's DNS-01 solver
-    # wants. Under split-horizon both flavours share the zone name and
-    # external-dns publishes the same records into each, so the per-flavour
-    # ids ride alongside (empty when that flavour is off) for its
-    # zoneIdFilters to enumerate exactly the pair.
+    # DNS/TLS surface (empty when var.dns.zone_name is unset). The public
+    # zone always exists — cert-manager's DNS-01 solver pins its id, since
+    # Let's Encrypt validates over public DNS — and the private id rides
+    # alongside when split-horizon is on. external-dns cannot serve both
+    # flavours from one instance (its planner flattens matched zones into a
+    # single record view), so the manifests pin one instance per flavour by
+    # zone id and render the private instance only when its id is set.
     DNS_ZONE_NAME       = var.dns.zone_name != null ? var.dns.zone_name : ""
-    DNS_ZONE_ID         = local.dns_zone_id != null ? local.dns_zone_id : ""
     DNS_PUBLIC_ZONE_ID  = try(data.aws_route53_zone.cluster["public"].zone_id, "")
     DNS_PRIVATE_ZONE_ID = try(data.aws_route53_zone.cluster["private"].zone_id, "")
     DNS_DOMAIN          = var.dns.zone_name != null ? local.dns_domain : ""
     PATCHY_DOMAIN       = var.dns.zone_name != null ? local.patchy_domain : ""
     ACME_EMAIL          = var.dns.acme_email != null ? var.dns.acme_email : ""
 
-    # The Gateway's reserved addresses. The gateway component annotates the
-    # Cilium Gateway's LoadBalancer Service with the allocation ids; the IPs
-    # are informational (external-dns publishes records against the NLB).
+    # The Gateway's NLB shape. A public Gateway is an internet-facing NLB on
+    # the public subnets, pinned to the reserved addresses by allocation id
+    # (the IPs are informational — external-dns publishes records against
+    # the NLB); a private Gateway (var.gateway.private) is an internal NLB
+    # on the node subnets, with the EIP vars empty — the gateway component
+    # gates that annotation absent.
+    GATEWAY_NLB_SCHEME      = var.gateway.private ? "internal" : "internet-facing"
     GATEWAY_EIP_ALLOCATIONS = join(",", local.gateway_allocation_ids)
     GATEWAY_IP              = join(",", local.gateway_addresses)
-    GATEWAY_SUBNETS         = join(",", sort(tolist(var.network.public_subnet_ids)))
+    GATEWAY_SUBNETS         = join(",", sort(tolist(local.gateway_subnet_ids)))
 
     # instance, never ip. The AWS Load Balancer Controller can only register IP
     # targets when the AWS VPC CNI is the datapath; under any alternate CNI —

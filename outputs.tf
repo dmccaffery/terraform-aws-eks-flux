@@ -63,19 +63,18 @@ output "platform_registry" {
 }
 
 output "dns" {
-  description = "Delegated zone wiring (null when dns.zone_name is unset): zone name, primary hosted zone id plus the per-flavour ids, apex domain, served host and the public zone's name servers (null when the public flavour is off)."
+  description = "Delegated zone wiring (null when dns.zone_name is unset): zone name, per-flavour hosted zone ids (public always; private under split-horizon), apex domain, served host and the public zone's name servers."
   value = var.dns.zone_name == null ? null : {
     zone_name    = var.dns.zone_name
-    zone_id      = local.dns_zone_id
     zone_ids     = { for kind, zone in data.aws_route53_zone.cluster : kind => zone.zone_id }
     domain       = local.dns_domain
     host         = local.patchy_domain
-    name_servers = try(data.aws_route53_zone.cluster["public"].name_servers, null)
+    name_servers = data.aws_route53_zone.cluster["public"].name_servers
   }
 }
 
 output "gateway" {
-  description = "The Gateway's static addresses — reserved here or referenced from existing allocations (null when neither). One Cilium Gateway shares these across every HTTPRoute host."
+  description = "The Gateway's static addresses — reserved here or referenced from existing allocations (null when neither, and always null for a private Gateway, which carries no EIPs). One Cilium Gateway shares these across every HTTPRoute host."
   value = length(local.gateway_allocation_ids) > 0 ? {
     allocation_ids = local.gateway_allocation_ids
     addresses      = local.gateway_addresses

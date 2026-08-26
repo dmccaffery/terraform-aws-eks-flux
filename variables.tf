@@ -20,8 +20,9 @@ variable "network" {
   description = <<-EOT
     Existing VPC wiring, created upstream and never owned here.
     node_subnet_ids are the private subnets nodes launch into; pod_subnet_ids narrows the subnets Cilium
-    allocates pod ENIs from (defaults to the node subnets); public_subnet_ids carry the Gateway's NLB and its reserved
-    EIPs. manage_discovery_tags lets this module apply the karpenter.sh/discovery tag to those subnets — turn it off
+    allocates pod ENIs from (defaults to the node subnets); public_subnet_ids carry the public Gateway's NLB and its
+    reserved EIPs (a private Gateway spans the node subnets instead, so they may be omitted then).
+    manage_discovery_tags lets this module apply the karpenter.sh/discovery tag to those subnets — turn it off
     where the VPC owner tags them instead.
   EOT
   type = object({
@@ -357,14 +358,15 @@ variable "dns" {
   description = <<-EOT
     Existing delegated Route53 hosted zone (created upstream; never owned here, so cluster destroy/recreate never
     touches the zone or its NS delegation). zone_name enables the DNS/TLS surface: the external-dns + cert-manager
-    grants and the DNS_* / PATCHY_DOMAIN cluster vars. public_zone / private_zone select which flavour(s) of the
-    zone the cluster publishes records to — both for split-horizon (a private zone associated with the cluster VPC
-    shadows the public one, so in-VPC resolution needs its own records), private only for a fully internal
-    deployment. host optionally narrows the served host below the zone apex.
+    grants and the DNS_* / PATCHY_DOMAIN cluster vars. The PUBLIC flavour of the zone is always required — Let's
+    Encrypt resolves cert-manager's DNS-01 challenges over public DNS, so even a fully internal cluster keeps a
+    public zone for certificate issuance. private_zone adds the split-horizon flavour: a private zone under the
+    same name, associated with the cluster VPC, shadowing the public one for in-VPC resolution — required when the
+    Gateway is private (gateway.private), and equally valid alongside a public Gateway endpoint. host optionally
+    narrows the served host below the zone apex.
   EOT
   type = object({
     zone_name    = optional(string)
-    public_zone  = optional(bool, true)
     private_zone = optional(bool, false)
     host         = optional(string)
     acme_email   = optional(string)
@@ -376,11 +378,6 @@ variable "dns" {
     condition     = var.dns.zone_name == null || var.dns.acme_email != null
     error_message = "dns.acme_email is required when dns.zone_name is set (Let's Encrypt registration for the cert-manager issuers)."
   }
-
-  validation {
-    condition     = var.dns.zone_name == null || var.dns.public_zone || var.dns.private_zone
-    error_message = "At least one of dns.public_zone or dns.private_zone must be true when dns.zone_name is set."
-  }
 }
 
 variable "gateway" {
@@ -390,6 +387,11 @@ variable "gateway" {
     hosts are manifests-only. Reserving them here (default) keeps them outside the disposable cluster's lifecycle, so
     destroy/recreate serves the same addresses; alternatively reference existing allocations by id.
 
+    private flips the NLB internal: it spans the node subnets instead of the public ones and takes no Elastic IPs
+    (internal NLBs cannot carry them), so the whole EIP surface above goes inert. A private Gateway is only
+    reachable through in-VPC resolution, which is what requires dns.private_zone — the public zone still exists,
+    carrying only the cert-manager DNS-01 challenges that certificate issuance needs.
+
     install_crds publishes GATEWAY_API_CRDS, which has the flux-manifests gateway component install the Gateway API
     CRDs (the standard-channel set Cilium requires): EKS ships none today, and Cilium implements the API without
     owning its CRDs. Flip it off if the CRDs arrive some other way — most likely the day EKS installs them as managed
@@ -397,6 +399,7 @@ variable "gateway" {
     HTTPRoute with it).
   EOT
   type = object({
+    private           = optional(bool, false)
     reserve_static_ip = optional(bool, true)
     allocation_ids    = optional(set(string), [])
     install_crds      = optional(bool, true)
@@ -410,8 +413,18 @@ variable "gateway" {
   }
 
   validation {
-    condition     = !var.gateway.reserve_static_ip || length(var.network.public_subnet_ids) > 0
+    condition     = var.gateway.private || !var.gateway.reserve_static_ip || length(var.network.public_subnet_ids) > 0
     error_message = "gateway.reserve_static_ip needs network.public_subnet_ids — one EIP is reserved per subnet the Gateway's NLB spans."
+  }
+
+  validation {
+    condition     = !var.gateway.private || length(var.gateway.allocation_ids) == 0
+    error_message = "gateway.private is an internal NLB, which cannot carry Elastic IPs — allocation_ids requires a public Gateway."
+  }
+
+  validation {
+    condition     = !var.gateway.private || var.dns.private_zone
+    error_message = "gateway.private needs dns.private_zone — an internal Gateway is only reachable through the private zone's in-VPC resolution."
   }
 }
 

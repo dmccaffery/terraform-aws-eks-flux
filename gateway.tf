@@ -19,9 +19,14 @@
 # Two shapes: reserve them here (reserve_static_ip, the default), or reference
 # existing allocations by id (reserve_static_ip = false + allocation_ids), the
 # way a cloud-accounts-owned reservation would arrive.
+#
+# A private Gateway (var.gateway.private) is an internal NLB: it spans the
+# node subnets rather than the public ones and cannot carry Elastic IPs, so
+# the whole EIP surface here goes inert (validation keeps allocation_ids
+# empty) and stability comes from the private zone's records instead.
 
 resource "aws_eip" "gateway" {
-  for_each = var.gateway.reserve_static_ip ? var.network.public_subnet_ids : []
+  for_each = var.gateway.reserve_static_ip && !var.gateway.private ? var.network.public_subnet_ids : []
 
   domain = "vpc"
 
@@ -40,7 +45,11 @@ locals {
   gateway_eips = var.gateway.reserve_static_ip ? values(aws_eip.gateway) : values(data.aws_eip.gateway)
 
   # Sorted so the published vars are stable across plans regardless of set
-  # iteration order.
+  # iteration order. Both empty under a private Gateway.
   gateway_allocation_ids = sort([for eip in local.gateway_eips : eip.id])
   gateway_addresses      = sort([for eip in local.gateway_eips : eip.public_ip])
+
+  # The subnets the NLB spans: the node (private) subnets for an internal
+  # NLB, the public subnets otherwise.
+  gateway_subnet_ids = var.gateway.private ? var.network.node_subnet_ids : var.network.public_subnet_ids
 }
