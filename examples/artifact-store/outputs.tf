@@ -7,7 +7,7 @@ output "platform_registry" {
 }
 
 output "registry_id" {
-  description = "The store account id — the upstream.registry_id every consuming account's registry-cache points at."
+  description = "The store account id - the upstream.registry_id every consuming account's registry-cache points at."
   value       = module.store.registry_id
 }
 

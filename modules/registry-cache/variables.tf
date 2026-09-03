@@ -16,7 +16,7 @@ variable "name" {
 variable "upstream" {
   description = <<-EOT
     The artifact store this caches. registry_id and repository_prefix come straight from the artifact-store module's
-    registry_id / repository_prefix outputs; region is the store's region. The store must admit this account — which it
+    registry_id / repository_prefix outputs; region is the store's region. The store must admit this account - which it
     does org-wide by default (aws:PrincipalOrgID), so no change there is needed to onboard.
   EOT
   type = object({
@@ -35,7 +35,7 @@ variable "upstream" {
 variable "repository_prefix" {
   description = <<-EOT
     Local repository prefix the cached artifacts appear under. Null mirrors the upstream prefix, so image paths are
-    identical on both sides and a cluster moves between store and cache by swapping one variable — keep it that way
+    identical on both sides and a cluster moves between store and cache by swapping one variable - keep it that way
     unless the prefix is already taken in this registry.
   EOT
   type        = string

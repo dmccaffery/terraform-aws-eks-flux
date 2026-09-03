@@ -3,9 +3,10 @@
 
 output "platform_registry" {
   description = <<-EOT
-    Feed straight into the cluster module's platform_registry. is_pull_through_cache is false because this IS the store
-    — a cluster wired here reads it directly, which additionally requires its registry_reader_principals to appear in
-    this module's direct_pull_principals. Most clusters should point at a registry-cache module's output instead.
+    Feed straight into the cluster module's platform_registry. is_pull_through_cache is false because this IS the
+    store - a cluster wired here reads it directly, which additionally requires its registry_reader_principals to
+    appear in this module's direct_pull_principals. Most clusters should point at a registry-cache module's output
+    instead.
   EOT
   value = {
     url                   = "${local.registry_host}/${var.repository_prefix}"
@@ -19,7 +20,7 @@ output "registry_host" {
 }
 
 output "registry_id" {
-  description = "Account id owning the registry — the upstream_registry_id a registry-cache module points at."
+  description = "Account id owning the registry - the upstream_registry_id a registry-cache module points at."
   value       = local.account_id
 }
 
@@ -60,12 +61,12 @@ output "manifest_publisher" {
 }
 
 output "oidc_provider_arn" {
-  description = "The GitHub Actions OIDC provider the publishers federate through — created here or passed in."
+  description = "The GitHub Actions OIDC provider the publishers federate through - created here or passed in."
   value       = local.oidc_provider_arn
 }
 
 output "signed_identity_subjects" {
-  description = "Fulcio certificate-subject regexps for the publishing workflows (keyless mode) — feed these to the cluster module's signed_identity variable. Cloud-agnostic: the signer is GitHub, not the hosting cloud. Irrelevant when signing_kms_key_arn selects KMS signing."
+  description = "Fulcio certificate-subject regexps for the publishing workflows (keyless mode) - feed these to the cluster module's signed_identity variable. Cloud-agnostic: the signer is GitHub, not the hosting cloud. Irrelevant when signing_kms_key_arn selects KMS signing."
   value = {
     containers = "^https://github\\.com/${var.github.org}/${var.github.containers}/\\.github/workflows/publish\\.yaml@refs/heads/main$"
     manifests  = "^https://github\\.com/${var.github.org}/${var.github.manifests}/\\.github/workflows/publish\\.yaml@refs/tags/v.+$"
@@ -76,6 +77,6 @@ output "signed_identity_subjects" {
 }
 
 output "signing_kms_key_arn" {
-  description = "The KMS signing key the publishers sign with (null in keyless mode) — feed it to the cluster module's signed_identity.kms_key_arn so verification matches."
+  description = "The KMS signing key the publishers sign with (null in keyless mode) - feed it to the cluster module's signed_identity.kms_key_arn so verification matches."
   value       = var.signing_kms_key_arn
 }

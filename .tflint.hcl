@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Same shape as cloud-accounts: the terraform preset with the documentation
-// and naming rules pinned on. No provider ruleset — the org convention keeps
+// and naming rules pinned on. No provider ruleset - the org convention keeps
 // tflint plugin-free (validation depth comes from terraform validate + the
 // plan-time test suites).
 

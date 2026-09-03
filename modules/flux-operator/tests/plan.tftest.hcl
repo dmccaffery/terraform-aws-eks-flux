@@ -82,7 +82,7 @@ run "sync_is_signature_verified" {
   # backslashes, which yamlencode escapes again on the way in.
   assert {
     condition     = yamldecode(local.sync_verify_patches[0].patch)[0].value.provider == "cosign"
-    error_message = "verification is cosign — in keyless mode no key material is distributed anywhere"
+    error_message = "verification is cosign - in keyless mode no key material is distributed anywhere"
   }
 
   assert {
@@ -113,7 +113,7 @@ run "keyed_verification" {
 
   assert {
     condition     = yamldecode(local.sync_verify_patches[0].patch)[0].value.secretRef.name == "cosign-pub"
-    error_message = "keyed mode must verify against the cosign-pub public-key Secret — source-controller never calls the signing service"
+    error_message = "keyed mode must verify against the cosign-pub public-key Secret - source-controller never calls the signing service"
   }
 
   assert {

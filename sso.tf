@@ -188,7 +188,7 @@ resource "aws_secretsmanager_secret_version" "patchy_status_auth_config" {
 # Read access for the syncing KSAs, as a resource policy per secret naming its
 # exact readers. The identity side (iam.tf) already scopes each reader role to
 # ${SECRET_PREFIX}*; this narrows the other direction, so a secret and the
-# audience allowed to read it are declared — and deleted — together.
+# audience allowed to read it are declared - and deleted - together.
 locals {
   # Which secret-reader identities the SSO surface implies. Derived rather than
   # caller-listed: the pairs are fixed by the manifests contract, and an
@@ -203,7 +203,7 @@ locals {
 
   # A STATIC key per secret -> its (apply-time) ARN and the workload role keys
   # allowed to read it. Keying on the secret's own id would make for_each
-  # unknown at plan time — every key here is derived from the election alone,
+  # unknown at plan time - every key here is derived from the election alone,
   # so the instance set is fixed before anything is created.
   secret_reader_roles = merge(
     {

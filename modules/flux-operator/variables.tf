@@ -18,7 +18,7 @@ variable "operator_chart" {
   description = <<-EOT
     flux-operator helm chart location: the platform registry's charts/flux-operator, published by flux-containers
     (the artifact store must be populated before the first cluster bootstraps). A null version installs the latest
-    available at create and pins it in state — later applies don't auto-upgrade.
+    available at create and pins it in state - later applies don't auto-upgrade.
   EOT
   type = object({
     repository = string # e.g. oci://<registry>/charts
@@ -68,7 +68,7 @@ variable "signed_identity" {
     Cosign verification enforced on the generated flux-system OCIRepository, so an unsigned or tampered manifests
     artifact is never applied. Exactly one mode: keyless (issuer + manifests_subject, Go regexps over the Fulcio
     certificate) or a signing key's public half (kms_public_key_pem, distributed as the cosign-pub Secret the verify
-    patch references — source-controller verifies against the public key and never calls the signing service).
+    patch references - source-controller verifies against the public key and never calls the signing service).
   EOT
   type = object({
     issuer             = optional(string)
@@ -94,7 +94,7 @@ variable "registry_arn" {
 variable "registry_is_pull_through_cache" {
   description = <<-EOT
     Whether the platform registry is a pull-through cache. When set, the controllers also get ecr:CreateRepository and
-    ecr:BatchImportUpstreamImage on the prefix — the first pull of any artifact is what materialises its repository.
+    ecr:BatchImportUpstreamImage on the prefix - the first pull of any artifact is what materialises its repository.
   EOT
   type        = bool
   nullable    = false
@@ -113,7 +113,7 @@ variable "kustomize_patches" {
 
 variable "cluster_vars" {
   description = <<-EOT
-    The cluster-vars ConfigMap contents — every value the flux-manifests stack substitutes via
+    The cluster-vars ConfigMap contents - every value the flux-manifests stack substitutes via
     postBuild.substituteFrom.
   EOT
   type        = map(string)

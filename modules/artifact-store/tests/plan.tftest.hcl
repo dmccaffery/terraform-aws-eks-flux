@@ -160,7 +160,7 @@ run "publisher_trust_pins_numeric_ids" {
 
   assert {
     condition     = length(local.chart_publisher_subjects) == 1
-    error_message = "the chart publisher is trusted from main only — PR validation never gets push credentials"
+    error_message = "the chart publisher is trusted from main only - PR validation never gets push credentials"
   }
 }
 
@@ -176,7 +176,7 @@ run "manifests_id_may_lag" {
   # The repo may not exist on GitHub when the store is first applied.
   assert {
     condition     = local.manifests_subject_repo == "bitwise-media-group/flux-manifests"
-    error_message = "without manifests_id the subject falls back to the name-only form (which a post-cutoff repo never presents — set the id and re-apply)"
+    error_message = "without manifests_id the subject falls back to the name-only form (which a post-cutoff repo never presents - set the id and re-apply)"
   }
 }
 

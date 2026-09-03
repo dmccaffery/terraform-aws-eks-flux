@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 variable "region" {
-  description = "Region the cache lives in — the cluster's own region, so pulls stay local."
+  description = "Region the cache lives in - the cluster's own region, so pulls stay local."
   type        = string
   default     = "eu-west-2"
 }

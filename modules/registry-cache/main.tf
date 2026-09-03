@@ -13,7 +13,7 @@
 #
 # The cache materialises each repository on its FIRST pull, which is why every
 # puller (kubelet, the flux controllers, kyverno) needs ecr:CreateRepository and
-# ecr:BatchImportUpstreamImage as well as read — see the consumer_policy output.
+# ecr:BatchImportUpstreamImage as well as read - see the consumer_policy output.
 #
 # Digests are preserved end to end, so cosign verification works through the
 # cache exactly as it does against the store: signatures are ordinary tagged
@@ -147,7 +147,7 @@ locals {
     "ecr:DescribeImages",
     "ecr:ListImages",
     # The first pull of any artifact is what creates its repository here, so
-    # these are not optional extras — without them a fresh cluster fails on its
+    # these are not optional extras - without them a fresh cluster fails on its
     # very first image.
     "ecr:CreateRepository",
     "ecr:BatchImportUpstreamImage",

@@ -85,7 +85,7 @@ run "local_prefix_mirrors_upstream" {
 
   assert {
     condition     = output.platform_registry.url == "999988887777.dkr.ecr.eu-west-2.amazonaws.com/platform"
-    error_message = "the cache's url must point at THIS account's registry — pulls stay local, which is the whole point"
+    error_message = "the cache's url must point at THIS account's registry - pulls stay local, which is the whole point"
   }
 }
 

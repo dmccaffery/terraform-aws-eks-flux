@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 # The delegated Route53 hosted zone (e.g. patchy.bitwisemedia.co.uk) is created
-# upstream and delegated from the parent domain once — it deliberately lives
+# upstream and delegated from the parent domain once - it deliberately lives
 # outside this module so cluster destroy/recreate never touches the zone or its
 # NS delegation. This module only looks it up: validating it exists, deriving
 # the domain for the Gateway/certificate wiring, and passing the ids through
-# to external-dns via cluster vars. The PUBLIC flavour always exists —
+# to external-dns via cluster vars. The PUBLIC flavour always exists - 
 # cert-manager's DNS-01 challenges resolve over public DNS, so even a fully
 # internal cluster keeps a public zone for certificate issuance. The private
 # flavour (var.dns.private_zone) is the split-horizon addition: a private
@@ -15,7 +15,7 @@
 # flavour, publishing the same records into each.
 
 locals {
-  # The zone flavours the cluster uses — public unconditionally, private by
+  # The zone flavours the cluster uses - public unconditionally, private by
   # election.
   dns_zone_kinds = var.dns.zone_name == null ? [] : concat(
     ["public"],

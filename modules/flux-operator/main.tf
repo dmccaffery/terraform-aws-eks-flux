@@ -3,7 +3,7 @@
 
 # The flux bootstrap chain: three helm releases, so a single terraform apply
 # takes an empty cluster to a reconciling GitOps platform without any
-# kubernetes_manifest plan-time CRD problems —
+# kubernetes_manifest plan-time CRD problems - 
 #
 #   1. flux-operator     the operator + its CRDs (FluxInstance, ResourceSet, ...)
 #   2. cluster-inputs    the terraform -> flux-manifests contract (local chart):
@@ -53,7 +53,7 @@ locals {
   # manifests artifact rides in as a patch on the generated OCIRepository
   # (named after the namespace, matching flux bootstrap). KEYLESS mode: the
   # artifact must carry a Fulcio certificate whose issuer/subject match the
-  # flux-manifests publish workflow — no key material is distributed anywhere.
+  # flux-manifests publish workflow - no key material is distributed anywhere.
   # KEYED mode: source-controller verifies against the public key(s) in the
   # cosign-pub Secret (it never calls the signing service itself).
   sync_verify_patches = [

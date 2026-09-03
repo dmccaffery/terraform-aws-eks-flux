@@ -4,7 +4,7 @@
 # Who may push, and who may pull.
 #
 # PUSH: the two GitHub Actions publishers, through the account's GitHub OIDC
-# provider. These are the only long-lived identities the platform has — every
+# provider. These are the only long-lived identities the platform has - every
 # in-cluster workload uses EKS Pod Identity instead.
 #
 # PULL: nothing by default except the ECR pull-through cache service, and that
@@ -17,13 +17,13 @@ locals {
   # GitHub mints immutable subjects for repos created (or renamed/transferred)
   # after 2026-07-15: repo:<org>@<org id>/<repo>@<repo id>:<context>. Both
   # publishing repos are post-cutoff, so the subject conditions must pin the
-  # numeric ids — the name-only form never matches and AssumeRoleWithWebIdentity
+  # numeric ids - the name-only form never matches and AssumeRoleWithWebIdentity
   # fails.
   containers_subject_repo = "${var.github.org}@${var.github.org_id}/${var.github.containers}@${var.github.containers_id}"
 
   # flux-manifests may not exist on GitHub yet when the store is first applied.
-  # Until manifests_id is set, its subject falls back to the name-only form —
-  # which a post-cutoff repo will never present — so set the id and re-apply as
+  # Until manifests_id is set, its subject falls back to the name-only form - 
+  # which a post-cutoff repo will never present - so set the id and re-apply as
   # soon as the repo is created.
   manifests_subject_repo = (
     var.github.manifests_id != null
@@ -37,7 +37,7 @@ locals {
   )
 
   # flux-containers publishes (and keyless-signs) charts + images from its
-  # default branch only — PR validation never gets push credentials.
+  # default branch only - PR validation never gets push credentials.
   chart_publisher_subjects = ["repo:${local.containers_subject_repo}:ref:refs/heads/main"]
 
   # Release tags publish versioned artifacts and move `staging`; merges to main
@@ -149,7 +149,7 @@ data "aws_iam_policy_document" "publisher" {
   }
 }
 
-# Both publishers hold push on the whole platform prefix — per-namespace push
+# Both publishers hold push on the whole platform prefix - per-namespace push
 # separation has no ECR equivalent. The effective control is consumer-side
 # verification: every OCIRepository and the Kyverno policy pin the exact signer
 # workflow identity, so a compromised chart publisher pushing a fake manifests
@@ -177,7 +177,7 @@ resource "aws_iam_role_policy" "publisher" {
 
 # ---------------------------------------------------------------------------
 # Read access. A registry policy rather than per-repository policies, so it
-# covers every repository the creation template will ever make — including the
+# covers every repository the creation template will ever make - including the
 # ones that do not exist yet.
 #
 # NOTE: ECR allows exactly one registry policy per account per region. This
@@ -194,7 +194,7 @@ locals {
   # as one <account>:root principal per downstream account; the actual caller
   # is that account's PTC role (assumed by pullthroughcache.ecr.amazonaws.com),
   # so aws:PrincipalOrgID matches it and covers every current AND future member
-  # account — no list to maintain as clusters come online.
+  # account - no list to maintain as clusters come online.
   pull_through_cache_statement = {
     Sid    = "OrganizationPullThroughCache"
     Effect = "Allow"
@@ -219,7 +219,7 @@ locals {
   }
 
   # Named principals allowed to read the store DIRECTLY rather than through a
-  # cache — feed a cluster's registry_reader_principals output through here.
+  # cache - feed a cluster's registry_reader_principals output through here.
   direct_pull_statements = length(var.direct_pull_principals) > 0 ? [
     {
       Sid       = "DirectPull"

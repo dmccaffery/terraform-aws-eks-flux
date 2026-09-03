@@ -13,9 +13,9 @@
 # Two properties make a KMS key cosign-appropriate, and both are immutable
 # after creation:
 #
-#   - key_usage SIGN_VERIFY — an ENCRYPT_DECRYPT key (the KMS default) cannot
+#   - key_usage SIGN_VERIFY - an ENCRYPT_DECRYPT key (the KMS default) cannot
 #     sign at all.
-#   - an asymmetric signing spec cosign supports — ECC_NIST_P256 by default,
+#   - an asymmetric signing spec cosign supports - ECC_NIST_P256 by default,
 #     matching cosign's own default algorithm (ECDSA P-256 / SHA-256).
 #
 # Publishers sign with `cosign sign --key awskms:///<key-arn>`; verifiers need
@@ -24,7 +24,7 @@
 #
 # There is deliberately no enable_key_rotation here: KMS cannot auto-rotate
 # asymmetric keys, and rotating a signing key is not an operational nicety but
-# an identity change — every consumer must be re-pointed and existing
+# an identity change - every consumer must be re-pointed and existing
 # signatures no longer match. Rotation, when needed, is a new key plus
 # re-signing, coordinated by humans. For the same reason the deletion window
 # defaults to the maximum: deleting this key permanently breaks verification
@@ -38,8 +38,8 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   partition  = data.aws_partition.current.partition
 
-  # Owning-account root: keeps the account in control (no lockout) and — the
-  # load-bearing part — delegates to IAM identity policies, which is how the
+  # Owning-account root: keeps the account in control (no lockout) and - the
+  # part that matters - delegates to IAM identity policies, which is how the
   # artifact-store module grants its publisher roles kms:Sign without touching
   # this key policy.
   root_statement = {
@@ -64,7 +64,7 @@ locals {
     }
   ] : []
 
-  # Verification is not a privilege — the public key is public. Granting it
+  # Verification is not a privilege - the public key is public. Granting it
   # org-wide (wildcard principal, aws:PrincipalOrgID condition) means a new
   # cluster account onboards without editing this module: the cluster module's
   # plan-time aws_kms_public_key read, the bootstrap public-key Secret, and
@@ -113,7 +113,7 @@ resource "aws_kms_key" "signing" {
 
 # Stable human-readable handle. Signing and verification should still reference
 # the ARN (it encodes account and region, so it works from anywhere); the alias
-# exists for consoles, CLIs and same-account convenience — and re-pointing it
+# exists for consoles, CLIs and same-account convenience - and re-pointing it
 # is NOT rotation, since everything is wired by ARN.
 resource "aws_kms_alias" "signing" {
   name          = "alias/${var.name}"

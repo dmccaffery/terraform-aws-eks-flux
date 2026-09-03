@@ -8,7 +8,7 @@
 #
 # Reads are org-wide by construction: only the ECR pull-through cache service
 # may pull, matched on aws:PrincipalOrgID, so onboarding a new cluster account
-# means applying examples/registry-cache there — never editing this.
+# means applying examples/registry-cache there - never editing this.
 
 provider "aws" {
   region = var.region
@@ -28,7 +28,7 @@ module "store" {
     manifests_id = var.github_manifests_id
   }
 
-  # Pass an existing provider once a cloud-accounts aws environment owns it —
+  # Pass an existing provider once a cloud-accounts aws environment owns it - 
   # IAM permits only one per issuer URL per account.
   oidc_provider_arn = var.oidc_provider_arn
 

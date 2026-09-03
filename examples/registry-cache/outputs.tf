@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 output "platform_registry" {
-  description = "Feed straight into the cluster module's platform_registry — url plus is_pull_through_cache = true."
+  description = "Feed straight into the cluster module's platform_registry - url plus is_pull_through_cache = true."
   value       = module.cache.platform_registry
 }
 

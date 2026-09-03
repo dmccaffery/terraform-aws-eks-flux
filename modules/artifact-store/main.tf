@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # The platform artifact store: every artifact the clusters consume, under path
-# namespaces beneath one ECR prefix —
+# namespaces beneath one ECR prefix - 
 #
 #   <prefix>/charts/<name>            helm charts mirrored by flux-containers
 #   <prefix>/images/<original-path>   digest-pinned images mirrored by flux-containers
@@ -10,10 +10,10 @@
 #
 # ECR has no arbitrary-path model: every one of those is a real repository that
 # must exist before a push. A REPOSITORY CREATION TEMPLATE with CREATE_ON_PUSH
-# is what restores Artifact Registry's ergonomics — publishers simply push, and
+# is what restores Artifact Registry's ergonomics - publishers simply push, and
 # ECR creates each repository with this template's lifecycle policy, tag
 # mutability, encryption and tags. Without a matching template ECR refuses to
-# create on push at all, so the template is load-bearing, not a nicety.
+# create on push at all, so the template is essential, not a nicety.
 #
 # There is no signing key anywhere in this module: artifacts are cosign-signed
 # KEYLESSLY by the publishing GitHub Actions workflows (OIDC -> Fulcio/Rekor),

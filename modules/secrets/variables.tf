@@ -4,7 +4,7 @@
 variable "secret_prefix" {
   description = <<-EOT
     Prefix for every secret name, matching the cluster module's secret_prefix input (the manifests sync
-    <prefix><name>, so the two must move together — and the cluster module's reader roles scope their read grant to
+    <prefix><name>, so the two must move together - and the cluster module's reader roles scope their read grant to
     the same prefix). Lets multiple clusters share one account with distinct secrets -- each cluster then needs its
     own prefixed set and fresh out-of-band versions. Include the trailing separator (e.g. 'patchy-x-'); null keeps
     the unprefixed names.

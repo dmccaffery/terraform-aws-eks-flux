@@ -34,7 +34,7 @@ run "key_is_cosign_appropriate" {
   # and the default spec matches cosign's own default algorithm.
   assert {
     condition     = aws_kms_key.signing.key_usage == "SIGN_VERIFY"
-    error_message = "the key must be a SIGN_VERIFY key — an encryption key cannot sign"
+    error_message = "the key must be a SIGN_VERIFY key - an encryption key cannot sign"
   }
 
   assert {
@@ -59,7 +59,7 @@ run "secp256k1_is_rejected" {
   command = plan
 
   # KMS offers ECC_SECG_P256K1 for signing, but sigstore does not accept
-  # secp256k1 — a key created with it would sign artifacts nothing verifies.
+  # secp256k1 - a key created with it would sign artifacts nothing verifies.
   variables {
     key_spec = "ECC_SECG_P256K1"
   }
@@ -71,7 +71,7 @@ run "policy_is_owner_only_by_default" {
   command = plan
 
   # With no organization and no cross-account signers, the policy is exactly
-  # the owning-account root statement — which both prevents lockout and
+  # the owning-account root statement - which both prevents lockout and
   # delegates to IAM identity policies (how artifact-store grants its
   # publishers kms:Sign without touching this key policy).
   assert {
@@ -94,7 +94,7 @@ run "verification_is_org_wide" {
 
   # Wildcard principal conditioned on the org id, exactly like the artifact
   # store's read grant: a new cluster account onboards without editing this
-  # module. Verification is not a privilege — the public key is public.
+  # module. Verification is not a privilege - the public key is public.
   assert {
     condition = anytrue([
       for statement in jsondecode(aws_kms_key.signing.policy).Statement :

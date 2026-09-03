@@ -22,7 +22,7 @@ variable "network" {
 }
 
 variable "platform_registry" {
-  description = "Where charts, images and the manifests artifact come from — pass a registry-cache or artifact-store module's platform_registry output rather than composing it by hand."
+  description = "Where charts, images and the manifests artifact come from - pass a registry-cache or artifact-store module's platform_registry output rather than composing it by hand."
   type = object({
     url                   = string
     is_pull_through_cache = bool

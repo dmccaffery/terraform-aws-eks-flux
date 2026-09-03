@@ -4,7 +4,7 @@
 # The static addresses for the platform Gateway. Cilium's Gateway API
 # implementation materialises exactly one LoadBalancer Service per Gateway
 # (cilium-gateway-<name>), which the AWS Load Balancer Controller turns into an
-# NLB bound to these Elastic IPs — one per subnet the NLB spans, which is an NLB
+# NLB bound to these Elastic IPs - one per subnet the NLB spans, which is an NLB
 # requirement rather than a per-host one. Every HTTPRoute hostname then shares
 # that one address set, so adding a host is manifests-only: an HTTPRoute plus
 # the external-dns record, no terraform change.

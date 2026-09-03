@@ -6,7 +6,7 @@
 # store: images come from a registry beside the nodes, and the store stays
 # closed to direct reads.
 #
-# Nothing needs to change in the store to onboard this account — its registry
+# Nothing needs to change in the store to onboard this account - its registry
 # policy admits the whole organization's pull-through caches by
 # aws:PrincipalOrgID.
 #

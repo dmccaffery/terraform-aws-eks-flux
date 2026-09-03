@@ -4,7 +4,7 @@
 output "platform_registry" {
   description = <<-EOT
     Feed straight into the cluster module's platform_registry. is_pull_through_cache is true, which is what adds
-    ecr:CreateRepository and ecr:BatchImportUpstreamImage to every puller's grant — a cache materialises each
+    ecr:CreateRepository and ecr:BatchImportUpstreamImage to every puller's grant - a cache materialises each
     repository on its first pull, so a cluster wired here without those permissions fails on its first image.
   EOT
   value = {
@@ -29,7 +29,7 @@ output "upstream_registry_url" {
 }
 
 output "consumer_policy_arn" {
-  description = "IAM policy granting pull (and first-pull cache fill) on the cached prefix. The cluster module composes its own equivalent grant, so attach this only to pullers outside it — CI runners, bastions."
+  description = "IAM policy granting pull (and first-pull cache fill) on the cached prefix. The cluster module composes its own equivalent grant, so attach this only to pullers outside it - CI runners, bastions."
   value       = aws_iam_policy.consumer.arn
 }
 

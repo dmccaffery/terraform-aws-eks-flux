@@ -7,6 +7,6 @@ output "namespace" {
 }
 
 output "registry_reader_roles" {
-  description = "IAM role ARNs the flux controllers assume through Pod Identity — the identities that read the platform registry."
+  description = "IAM role ARNs the flux controllers assume through Pod Identity - the identities that read the platform registry."
   value       = [for role in aws_iam_role.flux : role.arn]
 }

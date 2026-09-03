@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 output "key_arn" {
-  description = "The signing key ARN — feed it to the artifact-store module's signing_kms_key_arn (grants the publishers kms:Sign) and to the cluster module's signed_identity.kms_key_arn (selects KMS verification)."
+  description = "The signing key ARN - feed it to the artifact-store module's signing_kms_key_arn (grants the publishers kms:Sign) and to the cluster module's signed_identity.kms_key_arn (selects KMS verification)."
   value       = aws_kms_key.signing.arn
 }
 
@@ -12,7 +12,7 @@ output "key_id" {
 }
 
 output "alias_name" {
-  description = "The key's alias (alias/<name>) — a human-readable handle for consoles and same-account CLIs; wiring should use key_arn."
+  description = "The key's alias (alias/<name>) - a human-readable handle for consoles and same-account CLIs; wiring should use key_arn."
   value       = aws_kms_alias.signing.name
 }
 

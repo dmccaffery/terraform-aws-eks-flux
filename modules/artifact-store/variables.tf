@@ -32,7 +32,7 @@ variable "repository_prefix" {
 variable "organization_id" {
   description = <<-EOT
     AWS Organizations id (o-xxxxxxxxxx). Every account in the organization may pull through an ECR pull-through cache,
-    matched by aws:PrincipalOrgID rather than an account list — so onboarding a new cluster account needs no change
+    matched by aws:PrincipalOrgID rather than an account list - so onboarding a new cluster account needs no change
     here. Narrow it with organization_paths if the whole org is too broad.
   EOT
   type        = string
@@ -56,7 +56,7 @@ variable "organization_paths" {
 
 variable "direct_pull_principals" {
   description = <<-EOT
-    IAM principals allowed to pull from the store DIRECTLY rather than through a pull-through cache — the escape hatch
+    IAM principals allowed to pull from the store DIRECTLY rather than through a pull-through cache - the escape hatch
     for clusters the platform team lets read it straight. Feed a cluster module's registry_reader_principals output
     through here. Content security is cosign verification, not read denial, so coarse principals are acceptable.
   EOT
@@ -103,7 +103,7 @@ variable "promotion_environment" {
 
 variable "oidc_provider_arn" {
   description = <<-EOT
-    ARN of an existing GitHub Actions OIDC provider in this account. Null creates one here — convenient for a
+    ARN of an existing GitHub Actions OIDC provider in this account. Null creates one here - convenient for a
     standalone store, but an account that already has one (or gets one from a cloud-accounts aws environment) must pass
     it, since IAM permits only a single provider per issuer URL.
   EOT
@@ -135,7 +135,7 @@ variable "signing_kms_key_arn" {
     instead of keyless Fulcio identities. When set, both publisher roles get kms:Sign / kms:GetPublicKey /
     kms:DescribeKey on the key; feed the same ARN to the cluster module's signed_identity.kms_key_arn so verification
     matches. Null keeps signing keyless (the signed_identity_subjects output). The key itself lives outside this
-    module — signing identity should outlive any one store.
+    module - signing identity should outlive any one store.
   EOT
   type        = string
   nullable    = true
