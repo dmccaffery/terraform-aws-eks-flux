@@ -3,7 +3,7 @@
 
 # The terraform -> flux contract. reserved_cluster_vars is every value this
 # cluster publishes to the flux-manifests stack (the cluster-vars ConfigMap,
-# substituted into each Kustomization via postBuild.substituteFrom) — the
+# substituted into each Kustomization via postBuild.substituteFrom) - the
 # authoritative table lives in the flux-manifests README. Optional surfaces use
 # the empty-string convention so substitution never fails on an absent value;
 # manifests guard on empties.
@@ -49,7 +49,7 @@ locals {
     CONTAINER_REGISTRY = local.container_registry
     # OCIRepository registry auth: the flux controllers resolve ECR
     # credentials from their Pod Identity association. ARTIFACT_TAG_PROVIDER
-    # is the same election for the ResourceSetInputProviders' tag listing —
+    # is the same election for the ResourceSetInputProviders' tag listing - 
     # a flux-operator RSIP type name, since the manifests cannot derive it
     # from OCI_PROVIDER inside a substitution.
     OCI_PROVIDER          = "aws"
@@ -71,7 +71,7 @@ locals {
     # dropping straight into Secret data): the manifests render it into each
     # verified component namespace as a cosign-pub Secret, so the chart
     # OCIRepositories' secretRef verify resolves without any cross-namespace
-    # secret machinery. Public material — safe in a ConfigMap.
+    # secret machinery. Public material - safe in a ConfigMap.
     COSIGN_PUBLIC_KEY = local.signing_kms ? base64encode(one(data.aws_kms_public_key.signing[*].public_key_pem)) : ""
 
     # The stack's flux component (flux managing flux) re-renders the
@@ -82,8 +82,8 @@ locals {
     FLUX_SYNC_CHANNEL         = var.flux.sync.ref
 
     # DNS/TLS surface (empty when var.dns.zone_name is unset). The public
-    # zone always exists — cert-manager's DNS-01 solver pins its id, since
-    # Let's Encrypt validates over public DNS — and the private id rides
+    # zone always exists - cert-manager's DNS-01 solver pins its id, since
+    # Let's Encrypt validates over public DNS - and the private id rides
     # alongside when split-horizon is on. external-dns cannot serve both
     # flavours from one instance (its planner flattens matched zones into a
     # single record view), so the manifests pin one instance per flavour by
@@ -97,9 +97,9 @@ locals {
 
     # The Gateway's NLB shape. A public Gateway is an internet-facing NLB on
     # the public subnets, pinned to the reserved addresses by allocation id
-    # (the IPs are informational — external-dns publishes records against
+    # (the IPs are informational - external-dns publishes records against
     # the NLB); a private Gateway (var.gateway.private) is an internal NLB
-    # on the node subnets, with the EIP vars empty — the gateway component
+    # on the node subnets, with the EIP vars empty - the gateway component
     # gates that annotation absent.
     GATEWAY_NLB_SCHEME      = var.gateway.private ? "internal" : "internet-facing"
     GATEWAY_EIP_ALLOCATIONS = join(",", local.gateway_allocation_ids)
@@ -107,8 +107,8 @@ locals {
     GATEWAY_SUBNETS         = join(",", sort(tolist(local.gateway_subnet_ids)))
 
     # instance, never ip. The AWS Load Balancer Controller can only register IP
-    # targets when the AWS VPC CNI is the datapath; under any alternate CNI —
-    # Cilium here — it is limited to instance targets, whatever the pods'
+    # targets when the AWS VPC CNI is the datapath; under any alternate CNI - 
+    # Cilium here - it is limited to instance targets, whatever the pods'
     # addresses look like. Published rather than hard-coded in the manifests so
     # the constraint is visible where the rest of the Gateway wiring is.
     GATEWAY_NLB_TARGET_TYPE = "instance"
@@ -128,7 +128,7 @@ locals {
     # k8sServiceHost (kube-proxy replacement's direct route to the API
     # server) and eni.subnetIDsFilter (which subnets the operator pulls pod
     # ENIs from). Neither can be hardcoded in the manifests, and unlike the
-    # rest of this map's optional surfaces, Cilium cannot run without them —
+    # rest of this map's optional surfaces, Cilium cannot run without them - 
     # no empty-string convention.
     CILIUM_K8S_SERVICE_HOST = local.cluster_endpoint_host
     CILIUM_POD_SUBNET_IDS   = jsonencode(sort(tolist(local.pod_subnet_ids)))
@@ -211,7 +211,7 @@ locals {
     KARPENTER_SERVICE_ACCOUNT    = var.workload_identity.karpenter.service_account
 
     # The default NodePool's shape. Lists arrive comma-joined and are expanded
-    # manifests-side with splitList, exactly as STACK_COMPONENTS already is —
+    # manifests-side with splitList, exactly as STACK_COMPONENTS already is - 
     # cluster-vars is a flat string map, and this is the pattern the stack
     # already proves.
     KARPENTER_NODE_POOL_NAME       = local.node_pool.name
@@ -233,7 +233,7 @@ locals {
     # The broker terminates all claude-runner model traffic and proxies it to
     # this provider. Keys are harness-scoped (CLAUDE_*, so codex/copilot could
     # later publish CODEX_* siblings) and the knobs provider-prefixed
-    # (BEDROCK_REGION, never a generic REGION) — clarity over brevity,
+    # (BEDROCK_REGION, never a generic REGION) - clarity over brevity,
     # mirroring the broker's own PATCHY_BEDROCK_* env names. Only the aws
     # provider pair is published: the manifests' aws tree never reads the
     # vertex vars, and the common patchy core carries := defaults for them.
@@ -241,13 +241,13 @@ locals {
     CLAUDE_ANTHROPIC_AUTH        = local.claude_provider.anthropic_auth
     CLAUDE_BEDROCK_REGION        = local.claude_provider.name == "bedrock" ? coalesce(local.claude_provider.bedrock_region, data.aws_region.current.region) : ""
     CLAUDE_BEDROCK_REGION_PREFIX = local.claude_provider.bedrock_region_prefix != null ? local.claude_provider.bedrock_region_prefix : ""
-    # canonical=providerID pairs, comma-joined sorted — the same flat-string
+    # canonical=providerID pairs, comma-joined sorted - the same flat-string
     # list pattern KARPENTER_* and STACK_COMPONENTS already prove.
     CLAUDE_MODEL_MAP = join(",", [for k in sort(keys(local.claude_provider.model_map)) : "${k}=${local.claude_provider.model_map[k]}"])
     },
     # The RBAC subject groups, one var per role key in rbac.groups
     # (RBAC_GROUP_VIEWERS, RBAC_GROUP_DEVELOPERS, RBAC_GROUP_DEVOPS,
-    # RBAC_GROUP_ADMINS) — the manifests bind Role/ClusterRoleBindings on them;
+    # RBAC_GROUP_ADMINS) - the manifests bind Role/ClusterRoleBindings on them;
     # empty when the role is unbound or RBAC is off. These are the Kubernetes
     # group names the access entries map their IAM principals onto; the
     # manifests bind whatever names arrive and never see the subject type
@@ -259,7 +259,7 @@ locals {
   )
 }
 
-# The signing key's public half — cosign verification inside the cluster never
+# The signing key's public half - cosign verification inside the cluster never
 # needs the private key, and Flux verifies against a public-key Secret rather
 # than calling KMS, so this is the only key material that travels.
 data "aws_kms_public_key" "signing" {
@@ -319,7 +319,7 @@ module "flux_operator" {
   # and the Pod Identity agent must be live before the first reconcile needs
   # registry credentials.
   depends_on = [
-    aws_eks_node_group.system,
+    module.system_node_group,
     aws_eks_addon.pod_identity_agent,
     aws_eks_addon.main,
   ]

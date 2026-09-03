@@ -4,20 +4,20 @@
 # IAM identities for the flux-deployed platform workloads. The
 # namespace/service-account pairs are the terraform <-> flux-manifests contract
 # (overridable via var.workload_identity so this repo can track a manifests
-# change without a schema change) — the pairs themselves are cloud-neutral, so
+# change without a schema change) - the pairs themselves are cloud-neutral, so
 # every cluster consumes the same manifests.
 #
 # Workloads with a real pod bind through EKS Pod Identity associations. The
 # secret readers are the one exception: the secrets-store-sync-controller
 # materialises each SecretSync WITHOUT a pod, minting the sync KSA's token via
-# the TokenRequest API — and a token with no pod behind it lacks the
+# the TokenRequest API - and a token with no pod behind it lacks the
 # kubernetes.io/pod claim Pod Identity's AssumeRoleForPodIdentity requires, so
 # an association could never be exercised. The podless path is IRSA:
 # AssumeRoleWithWebIdentity needs only the SA-scoped OIDC token, so the
 # cluster's issuer is registered as an IAM OIDC provider and each reader role
 # trusts its own system:serviceaccount subject. The manifests point each sync
 # KSA at its role through the eks.amazonaws.com/role-arn annotation, composed
-# from the SECRETS_ROLE_PREFIX cluster var (flux.tf) — role names are
+# from the SECRETS_ROLE_PREFIX cluster var (flux.tf) - role names are
 # deterministic, so one prefix covers every pair.
 #
 # flux-system's own associations (source-controller, flux-operator) live in
@@ -80,7 +80,7 @@ locals {
 
   secret_arn_pattern = "arn:${local.partition}:secretsmanager:${data.aws_region.current.region}:${local.account_id}:secret:${local.secret_prefix}*"
 
-  # The issuer URL as an IAM condition-key host — the sub/aud keys on the OIDC
+  # The issuer URL as an IAM condition-key host - the sub/aud keys on the OIDC
   # provider's trust conditions are the issuer with its scheme stripped.
   oidc_issuer_host = trimprefix(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://")
 
@@ -394,6 +394,10 @@ data "aws_iam_policy_document" "secret_read" {
 resource "aws_iam_role" "workload" {
   for_each = local.workload_grants
 
+  # A fixed name, never name_prefix: the secret-reader role names are a
+  # published contract - the manifests compose ${SECRETS_ROLE_PREFIX}<ns>-<sa>
+  # (flux.tf) into each sync KSA's role-arn annotation, so the names must stay
+  # deterministic.
   name        = "${var.name}-${each.key}"
   description = "Platform workload ${each.value.namespace}/${each.value.service_account} (${var.name})"
 
@@ -418,7 +422,7 @@ resource "aws_iam_role_policy" "workload" {
 
 resource "aws_eks_pod_identity_association" "workload" {
   # Every grant except the podless secret readers: their KSAs never back a
-  # pod, so an association could never be exercised — they assume their roles
+  # pod, so an association could never be exercised - they assume their roles
   # through the IRSA trust above instead.
   for_each = {
     for key, grant in local.workload_grants : key => grant
@@ -433,7 +437,7 @@ resource "aws_eks_pod_identity_association" "workload" {
   tags = var.tags
 
   # Associations are accepted before the agent exists, but nothing can resolve
-  # credentials until it does — ordering them keeps a fresh apply honest.
+  # credentials until it does - ordering them keeps a fresh apply honest.
   depends_on = [aws_eks_addon.pod_identity_agent]
 }
 
@@ -447,6 +451,7 @@ locals {
       aws_iam_role.nodes.arn,
       aws_iam_role.karpenter_node.arn,
     ],
+    [for role in aws_iam_role.nodes_windows : role.arn],
     [for role in module.flux_operator.registry_reader_roles : role],
     [
       for service_account in var.workload_identity.kyverno.service_accounts :

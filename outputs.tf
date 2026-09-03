@@ -29,15 +29,36 @@ output "kubernetes_version" {
 }
 
 output "node_iam_role" {
-  description = "The system node group's IAM role (name and ARN); Karpenter nodes use the separate karpenter role."
+  description = "The IAM role shared by the Linux managed node groups (name and ARN); Windows node groups and Karpenter nodes use their own separate roles."
   value = {
     name = aws_iam_role.nodes.name
     arn  = aws_iam_role.nodes.arn
   }
 }
 
+output "system_node_group" {
+  description = "The system node group's actual name and ARN (the name carries a generated suffix)."
+  value = {
+    name = module.system_node_group.name
+    arn  = module.system_node_group.arn
+  }
+}
+
+output "node_groups" {
+  description = "Each var.node_groups entry's actual node group name and ARN (the names carry generated suffixes)."
+  value = {
+    for name, group in module.node_group : name => {
+      name = group.name
+      arn  = group.arn
+    }
+  }
+}
+
 output "karpenter" {
-  description = "Karpenter wiring the flux-manifests component renders its EC2NodeClass/NodePool from: the node role, the interruption queue and the subnet/security-group discovery tag."
+  description = <<-EOT
+    Karpenter wiring the flux-manifests component renders its EC2NodeClass/NodePool from: the node role, the
+    interruption queue and the subnet/security-group discovery tag.
+  EOT
   value = {
     node_role_name      = aws_iam_role.karpenter_node.name
     node_role_arn       = aws_iam_role.karpenter_node.arn
@@ -49,7 +70,9 @@ output "karpenter" {
 }
 
 output "cilium" {
-  description = "How Cilium is wired: the release terraform bootstraps (and the stack adopts), and where its ENI permissions live."
+  description = <<-EOT
+    How Cilium is wired: the release terraform bootstraps (and the stack adopts), and where its ENI permissions live.
+  EOT
   value = {
     release               = helm_release.cilium.name
     namespace             = helm_release.cilium.namespace
@@ -58,12 +81,18 @@ output "cilium" {
 }
 
 output "platform_registry" {
-  description = "The platform registry this cluster consumes from (pass-through of var.platform_registry): its url and whether it is a pull-through cache."
+  description = <<-EOT
+    The platform registry this cluster consumes from (pass-through of var.platform_registry): its url and whether it is
+    a pull-through cache.
+  EOT
   value       = var.platform_registry
 }
 
 output "dns" {
-  description = "Delegated zone wiring (null when dns.zone_name is unset): zone name, per-flavour hosted zone ids (public always; private under split-horizon), apex domain, served host and the public zone's name servers."
+  description = <<-EOT
+    Delegated zone wiring (null when dns.zone_name is unset): zone name, per-flavour hosted zone ids (public always;
+    private under split-horizon), apex domain, served host and the public zone's name servers.
+  EOT
   value = var.dns.zone_name == null ? null : {
     zone_name    = var.dns.zone_name
     zone_ids     = { for kind, zone in data.aws_route53_zone.cluster : kind => zone.zone_id }
@@ -74,7 +103,11 @@ output "dns" {
 }
 
 output "gateway" {
-  description = "The Gateway's static addresses — reserved here or referenced from existing allocations (null when neither, and always null for a private Gateway, which carries no EIPs). One Cilium Gateway shares these across every HTTPRoute host."
+  description = <<-EOT
+    The Gateway's static addresses - reserved here or referenced from existing allocations (null when neither, and
+    always null for a private Gateway, which carries no EIPs). One Cilium Gateway shares these across every HTTPRoute
+    host.
+  EOT
   value = length(local.gateway_allocation_ids) > 0 ? {
     allocation_ids = local.gateway_allocation_ids
     addresses      = local.gateway_addresses
@@ -82,7 +115,10 @@ output "gateway" {
 }
 
 output "rbac" {
-  description = "Cluster RBAC subjects (null unless rbac.enabled): each role's IAM principal (null when the role is OIDC-only) and the Kubernetes group it maps onto, published as the RBAC_GROUP_* cluster vars flux-manifests binds against."
+  description = <<-EOT
+    Cluster RBAC subjects (null unless rbac.enabled): each role's IAM principal (null when the role is OIDC-only) and
+    the Kubernetes group it maps onto, published as the RBAC_GROUP_* cluster vars flux-manifests binds against.
+  EOT
   value = var.rbac.enabled ? {
     for role, subject in local.rbac_roles : role => {
       principal_arn = subject.principal_arn
@@ -100,12 +136,20 @@ output "flux" {
 }
 
 output "registry_reader_principals" {
-  description = "Every identity that reads the platform registry (node roles, flux controllers, kyverno controllers). Covered automatically when platform_registry is a pull-through cache in this account; feed these to the artifact-store module's direct_pull_principals when the cluster reads a central store directly instead."
+  description = <<-EOT
+    Every identity that reads the platform registry (node roles, flux controllers, kyverno controllers). Covered
+    automatically when platform_registry is a pull-through cache in this account; feed these to the artifact-store
+    module's direct_pull_principals when the cluster reads a central store directly instead.
+  EOT
   value       = local.registry_reader_principals
 }
 
 output "sso" {
-  description = "SSO secrets this cluster owns (null unless sso.enabled): the generated dex client secrets and the composed config documents. The out-of-band dex-<id>-<field> connector containers live in modules/secrets (a durable root), fed the same sso value."
+  description = <<-EOT
+    SSO secrets this cluster owns (null unless sso.enabled): the generated dex client secrets and the composed config
+    documents. The out-of-band dex-<id>-<field> connector containers live in modules/secrets (a durable root), fed the
+    same sso value.
+  EOT
   value = var.sso.enabled ? {
     client_secrets = { for client, secret in aws_secretsmanager_secret.dex_client : client => secret.name }
     config_documents = concat(

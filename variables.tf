@@ -7,8 +7,8 @@ variable "name" {
   nullable    = false
 
   validation {
-    condition     = can(regex("^[a-z]([a-z0-9-]{0,22})$", var.name))
-    error_message = "name must be a short lowercase RFC-1035 label (it prefixes IAM role names with tight length limits)."
+    condition     = can(regex("^[a-z]([a-z0-9-]{0,21})$", var.name))
+    error_message = "name must be a short lowercase RFC-1035 label of at most 22 characters (it prefixes IAM role name_prefixes, whose 26-character generated suffix must fit the 64-character role name limit)."
   }
 }
 
@@ -22,15 +22,26 @@ variable "network" {
     node_subnet_ids are the private subnets nodes launch into; pod_subnet_ids narrows the subnets Cilium
     allocates pod ENIs from (defaults to the node subnets); public_subnet_ids carry the public Gateway's NLB and its
     reserved EIPs (a private Gateway spans the node subnets instead, so they may be omitted then).
-    manage_discovery_tags lets this module apply the karpenter.sh/discovery tag to those subnets — turn it off
+    manage_discovery_tags lets this module apply the karpenter.sh/discovery tag to those subnets - turn it off
     where the VPC owner tags them instead.
+    security_group_ids attach to the control-plane ENIs alongside the EKS-managed cluster security group - use
+    them for caller-owned rules (e.g. API access from a bastion or VPN range).
+    restrict_default_security_group revokes the allow-all egress rules (0.0.0.0/0 and ::/0) on the EKS-managed
+    cluster security group and pins the documented minimum self-rules there instead. The revoke runs the AWS CLI
+    on the apply host (it must be installed and authenticated as the provider identity, with
+    ec2:DescribeSecurityGroupRules and ec2:RevokeSecurityGroupEgress), fires once per cluster after bootstrap,
+    and is drift-blind: a manually re-added rule is not re-revoked, and toggling back off restores nothing.
+    Nodes wear that group, so only enable this where node egress (ECR and S3 pulls, the EKS and SSM APIs)
+    arrives through VPC endpoints or caller-added rules.
   EOT
   type = object({
-    vpc_id                = string
-    node_subnet_ids       = set(string)
-    pod_subnet_ids        = optional(set(string), [])
-    public_subnet_ids     = optional(set(string), [])
-    manage_discovery_tags = optional(bool, true)
+    vpc_id                          = string
+    node_subnet_ids                 = set(string)
+    pod_subnet_ids                  = optional(set(string), [])
+    public_subnet_ids               = optional(set(string), [])
+    manage_discovery_tags           = optional(bool, true)
+    security_group_ids              = optional(set(string), [])
+    restrict_default_security_group = optional(bool, false)
   })
   nullable = false
 
@@ -66,7 +77,7 @@ variable "public_access" {
   description = <<-EOT
     Public control-plane endpoint. Disabled by default, so the API is reachable only through the always-on private
     endpoint. When enabled, cidrs constrains who may reach the public endpoint; empty leaves it open to 0.0.0.0/0
-    (PoC posture) — constrain it as soon as a stable egress CIDR exists.
+    (PoC posture) - constrain it as soon as a stable egress CIDR exists.
   EOT
   type = object({
     enable = optional(bool, false)
@@ -107,11 +118,11 @@ variable "rbac" {
   description = <<-EOT
     Cluster RBAC subjects. Each role names the Kubernetes group its access entry (or OIDC federation) maps to. The
     group names are published as RBAC_GROUP_<ROLE> cluster vars, which flux-manifests' rbac component binds
-    Role/ClusterRoleBindings against — the manifests contract carries only group names, never the subject type
+    Role/ClusterRoleBindings against - the manifests contract carries only group names, never the subject type
     behind them.
     principal_arn is optional: set it for an IAM Identity Center permission-set role (or any IAM role/user) that
     should get an EKS access entry mapping it onto the group. Leave it null when the group is populated purely
-    through OIDC federation instead (sso.kubectl) — no access entry is created, and the group name only ever
+    through OIDC federation instead (sso.kubectl) - no access entry is created, and the group name only ever
     reaches Kubernetes via the groups claim dex asserts. A role can rely on both mechanisms at once by giving the
     IAM principal and the OIDC-asserted group the same literal group name.
   EOT
@@ -129,7 +140,7 @@ variable "rbac" {
 
   validation {
     condition     = var.rbac.enabled || alltrue([for role in values(var.rbac.groups) : role == null])
-    error_message = "rbac.groups requires rbac.enabled — without it no access entries are created and the group subjects would bind nothing."
+    error_message = "rbac.groups requires rbac.enabled - without it no access entries are created and the group subjects would bind nothing."
   }
 
   validation {
@@ -143,7 +154,7 @@ variable "rbac" {
 
 variable "cluster_admin_principals" {
   description = <<-EOT
-    IAM principal ARNs granted AmazonEKSClusterAdminPolicy through an access entry — the break-glass and CI identities.
+    IAM principal ARNs granted AmazonEKSClusterAdminPolicy through an access entry - the break-glass and CI identities.
     The creating principal is admitted automatically (bootstrap_cluster_creator_admin_permissions), so this is for
     everyone else.
   EOT
@@ -152,11 +163,11 @@ variable "cluster_admin_principals" {
   default     = []
 }
 
-variable "system_node_pool" {
+variable "system_node_group" {
   description = <<-EOT
     The always-on managed node group platform controllers pin to (label role=system): flux, kyverno, cert-manager,
     external-dns, karpenter and the rest. These counts are CLUSTER-WIDE totals, not per-zone.
-    Sizing must fit the whole platform tier — Karpenter only provisions workload capacity, never this.
+    Sizing must fit the whole platform tier - Karpenter only provisions workload capacity, never this.
   EOT
   type = object({
     instance_types = optional(list(string), ["m7i.large"])
@@ -170,21 +181,66 @@ variable "system_node_pool" {
   default  = {}
 
   validation {
-    condition     = contains(["ON_DEMAND", "SPOT"], var.system_node_pool.capacity_type)
-    error_message = "system_node_pool.capacity_type must be ON_DEMAND or SPOT (the platform tier should stay ON_DEMAND)."
+    condition     = contains(["ON_DEMAND", "SPOT"], var.system_node_group.capacity_type)
+    error_message = "system_node_group.capacity_type must be ON_DEMAND or SPOT (the platform tier should stay ON_DEMAND)."
+  }
+}
+
+variable "node_groups" {
+  description = <<-EOT
+    Additional managed node groups, keyed by name ("system" is reserved for the platform tier). Most clusters need
+    none - Karpenter provisions workload capacity - so this exists for capacity Karpenter cannot express: static
+    pools with extra security groups, or Windows nodes.
+    Each group takes the system_node_group sizing arguments plus: security_group_ids, attached to the group's nodes
+    through its launch template alongside the EKS-managed cluster security group every node wears; ami_type,
+    selecting the AMI family (null is the EKS AL2023 default); labels and taints for scheduling.
+    Linux groups get the Cilium agent-not-ready bootstrap taint automatically, exactly like the system group.
+    WINDOWS_* groups instead run the AMI's bundled vpc-shared-eni CNI (Cilium has no Windows datapath): they join
+    through a dedicated windows node role and EC2_WINDOWS access entry this module creates on demand, they skip the
+    Cilium taint, and their pods are addressed by EKS's control-plane VPC resource controller - which only hands out
+    addresses once Windows IPAM is enabled (the amazon-vpc-cni ConfigMap in kube-system with
+    enable-windows-ipam: "true", a Kubernetes object this module does not manage; ship it through flux).
+  EOT
+  type = map(object({
+    instance_types     = optional(list(string), ["m7i.large"])
+    capacity_type      = optional(string, "ON_DEMAND")
+    min_size           = optional(number, 2)
+    max_size           = optional(number, 4)
+    desired_size       = optional(number, 2)
+    disk_size_gib      = optional(number, 50)
+    security_group_ids = optional(set(string), [])
+    ami_type           = optional(string)
+    labels             = optional(map(string), {})
+    taints = optional(list(object({
+      key    = string
+      value  = optional(string)
+      effect = string
+    })), [])
+  }))
+  nullable = false
+  default  = {}
+
+  validation {
+    condition     = !contains(keys(var.node_groups), "system")
+    error_message = "node_groups must not use the key \"system\" - the platform tier's group is configured through system_node_group."
+  }
+
+  validation {
+    condition     = alltrue([for name in keys(var.node_groups) : can(regex("^[a-z]([a-z0-9-]{0,36})$", name))])
+    error_message = "node_groups keys must be short lowercase RFC-1035 labels (they prefix the node group and launch template names)."
   }
 }
 
 variable "cilium" {
   description = <<-EOT
-    The CNI. Cilium runs in ENI mode with the AWS VPC CNI never installed, so pods hold routable VPC addresses exactly as
-    they would under vpc-cni, and kube-proxy is replaced by Cilium's eBPF datapath. This is the one chart terraform
+    The CNI. Cilium runs in ENI mode with the AWS VPC CNI never installed, so pods hold routable VPC addresses exactly
+    as they would under vpc-cni, and kube-proxy is replaced by Cilium's eBPF datapath. This is the one chart terraform
     installs: it must exist before the first node can report Ready, so flux cannot own the bootstrap. The release is
     bootstrap-only (ignore_changes) and the stack's cilium component adopts it afterwards.
 
     operator_pod_identity moves the ENI permissions off the node role and onto a Pod Identity association. Off by
     default: in ENI mode the agent cannot report Ready until the operator has attached ENIs, but the pod-identity-agent
-    addon only installs once nodes exist — a bootstrap cycle. Turn it on against a running cluster if the node-role
+    addon only installs once nodes exist - a bootstrap cycle. Turn it on against a running cluster if the node-role
     grant is unacceptable. helm_values is merged OVER the computed values for anything not modelled here.
   EOT
   type = object({
@@ -205,7 +261,7 @@ variable "karpenter" {
     splitList, exactly as STACK_COMPONENTS already is).
 
     There is deliberately no min_nodes: Karpenter scales from zero on pending pods and offers only ceilings
-    (spec.limits). The cluster's floor is system_node_pool.min_size.
+    (spec.limits). The cluster's floor is system_node_group.min_size.
   EOT
   type = object({
     node_pool = optional(object({
@@ -249,20 +305,20 @@ variable "karpenter" {
 
   validation {
     condition     = length(var.karpenter.node_pool.instance_categories) > 0 || length(var.karpenter.node_pool.instance_families) > 0
-    error_message = "karpenter.node_pool must select instances by category or by family — both cannot be empty."
+    error_message = "karpenter.node_pool must select instances by category or by family - both cannot be empty."
   }
 }
 
 variable "addons" {
   description = <<-EOT
     EKS add-ons. Everything AWS offers managed is taken managed, and only the rest reaches the cluster through flux.
-    vpc-cni and kube-proxy are absent by construction — Cilium replaces both, and
+    vpc-cni and kube-proxy are absent by construction - Cilium replaces both, and
     bootstrap_self_managed_addons is off so EKS never installs them.
 
     aws-secrets-store-csi-driver-provider bundles the Secrets Store CSI driver alongside the AWS provider, so only the
     secrets-store-sync-controller (the SecretSync CRD) remains a flux component. metrics-server is a COMMUNITY add-on:
     AWS supports its lifecycle, not the software. cert-manager and external-dns are community add-ons too but stay
-    flux-managed on purpose — as add-ons they would pull images from AWS's registry, breaking the invariant that
+    flux-managed on purpose - as add-ons they would pull images from AWS's registry, breaking the invariant that
     clusters never pull from a public registry and the Kyverno policy that enforces it.
   EOT
   type = map(object({
@@ -290,13 +346,13 @@ variable "addons" {
 variable "platform_registry" {
   description = <<-EOT
     Where the cluster consumes charts, images and the manifests artifact from. Pass a module output rather than
-    composing this by hand — `module.cache.platform_registry` (a pull-through cache in the cluster's own account, the
+    composing this by hand - `module.cache.platform_registry` (a pull-through cache in the cluster's own account, the
     default posture) or `module.store.platform_registry` (reading a central store directly, which additionally requires
     the store to admit this cluster's registry_reader_principals). Both modules emit exactly this shape, so the
     is_pull_through_cache flag is never guessed.
 
     url is <account>.dkr.ecr.<region>.amazonaws.com/<prefix>. is_pull_through_cache adds ecr:CreateRepository and
-    ecr:BatchImportUpstreamImage to every puller's grant — a cache materialises each repository on its FIRST pull, so
+    ecr:BatchImportUpstreamImage to every puller's grant - a cache materialises each repository on its FIRST pull, so
     without them the first image pull of a fresh cluster fails.
   EOT
   type = object({
@@ -313,11 +369,11 @@ variable "platform_registry" {
 
 variable "signed_identity" {
   description = <<-EOT
-    Cosign verification identity for every platform artifact — exactly one of two modes.
+    Cosign verification identity for every platform artifact - exactly one of two modes.
 
     KEYLESS (subjects set, kms_key_arn null): Go regexps matched against the Fulcio certificate of GitHub Actions OIDC
     signatures. The artifact-store module's signed_identity_subjects output provides the subjects; the issuer default
-    matches GitHub Actions. Cloud agnostic — the signing identities are GitHub's, not AWS's, so the same values serve
+    matches GitHub Actions. Cloud agnostic - the signing identities are GitHub's, not AWS's, so the same values serve
     clusters on any cloud.
 
     KMS (kms_key_arn set, subjects null): the publish workflows sign with an asymmetric SIGN_VERIFY KMS key
@@ -345,7 +401,7 @@ variable "signed_identity" {
     condition = var.signed_identity.kms_key_arn == null || (
       var.signed_identity.manifests_subject == null && var.signed_identity.containers_subject == null
     )
-    error_message = "kms_key_arn and the keyless subjects are mutually exclusive — verification is keyless or KMS, never both."
+    error_message = "kms_key_arn and the keyless subjects are mutually exclusive - verification is keyless or KMS, never both."
   }
 
   validation {
@@ -358,10 +414,10 @@ variable "dns" {
   description = <<-EOT
     Existing delegated Route53 hosted zone (created upstream; never owned here, so cluster destroy/recreate never
     touches the zone or its NS delegation). zone_name enables the DNS/TLS surface: the external-dns + cert-manager
-    grants and the DNS_* / PATCHY_DOMAIN cluster vars. The PUBLIC flavour of the zone is always required — Let's
+    grants and the DNS_* / PATCHY_DOMAIN cluster vars. The PUBLIC flavour of the zone is always required - Let's
     Encrypt resolves cert-manager's DNS-01 challenges over public DNS, so even a fully internal cluster keeps a
     public zone for certificate issuance. private_zone adds the split-horizon flavour: a private zone under the
-    same name, associated with the cluster VPC, shadowing the public one for in-VPC resolution — required when the
+    same name, associated with the cluster VPC, shadowing the public one for in-VPC resolution - required when the
     Gateway is private (gateway.private), and equally valid alongside a public Gateway endpoint. host optionally
     narrows the served host below the zone apex.
   EOT
@@ -382,20 +438,20 @@ variable "dns" {
 
 variable "gateway" {
   description = <<-EOT
-    The platform Gateway's static addresses. One Cilium Gateway materialises one LoadBalancer Service (an NLB), and every
-    HTTPRoute hostname shares its address — so the EIPs are reserved once, one per public subnet the NLB spans, and new
-    hosts are manifests-only. Reserving them here (default) keeps them outside the disposable cluster's lifecycle, so
-    destroy/recreate serves the same addresses; alternatively reference existing allocations by id.
+    The platform Gateway's static addresses. One Cilium Gateway materialises one LoadBalancer Service (an NLB), and
+    every HTTPRoute hostname shares its address - so the EIPs are reserved once, one per public subnet the NLB spans,
+    and new hosts are manifests-only. Reserving them here (default) keeps them outside the disposable cluster's
+    lifecycle, so destroy/recreate serves the same addresses; alternatively reference existing allocations by id.
 
     private flips the NLB internal: it spans the node subnets instead of the public ones and takes no Elastic IPs
     (internal NLBs cannot carry them), so the whole EIP surface above goes inert. A private Gateway is only
-    reachable through in-VPC resolution, which is what requires dns.private_zone — the public zone still exists,
+    reachable through in-VPC resolution, which is what requires dns.private_zone - the public zone still exists,
     carrying only the cert-manager DNS-01 challenges that certificate issuance needs.
 
     install_crds publishes GATEWAY_API_CRDS, which has the flux-manifests gateway component install the Gateway API
     CRDs (the standard-channel set Cilium requires): EKS ships none today, and Cilium implements the API without
-    owning its CRDs. Flip it off if the CRDs arrive some other way — most likely the day EKS installs them as managed
-    cluster furniture — and the manifests orphan them rather than pruning (deleting a CRD deletes every Gateway and
+    owning its CRDs. Flip it off if the CRDs arrive some other way - most likely the day EKS installs them as managed
+    cluster furniture - and the manifests orphan them rather than pruning (deleting a CRD deletes every Gateway and
     HTTPRoute with it).
   EOT
   type = object({
@@ -414,24 +470,24 @@ variable "gateway" {
 
   validation {
     condition     = var.gateway.private || !var.gateway.reserve_static_ip || length(var.network.public_subnet_ids) > 0
-    error_message = "gateway.reserve_static_ip needs network.public_subnet_ids — one EIP is reserved per subnet the Gateway's NLB spans."
+    error_message = "gateway.reserve_static_ip needs network.public_subnet_ids - one EIP is reserved per subnet the Gateway's NLB spans."
   }
 
   validation {
     condition     = !var.gateway.private || length(var.gateway.allocation_ids) == 0
-    error_message = "gateway.private is an internal NLB, which cannot carry Elastic IPs — allocation_ids requires a public Gateway."
+    error_message = "gateway.private is an internal NLB, which cannot carry Elastic IPs - allocation_ids requires a public Gateway."
   }
 
   validation {
     condition     = !var.gateway.private || var.dns.private_zone
-    error_message = "gateway.private needs dns.private_zone — an internal Gateway is only reachable through the private zone's in-VPC resolution."
+    error_message = "gateway.private needs dns.private_zone - an internal Gateway is only reachable through the private zone's in-VPC resolution."
   }
 }
 
 variable "workload_identity" {
   description = <<-EOT
     Namespace/service-account pairs the workload IAM roles bind to (EKS Pod Identity associations, except the podless
-    secret_readers which bind through IRSA) — the terraform <-> flux-manifests contract, cloud-neutral in shape so
+    secret_readers which bind through IRSA) - the terraform <-> flux-manifests contract, cloud-neutral in shape so
     every cluster tracks the same manifests. Override only to follow a manifests change.
   EOT
   type = object({
@@ -489,7 +545,7 @@ variable "observability" {
   description = <<-EOT
     Where the otel-collector ships telemetry. CloudWatch and X-Ray in the cluster's own account always; amp_endpoint
     optionally adds an Amazon Managed Prometheus remote-write target (and the aps:RemoteWrite grant that goes with it).
-    Pass the workspace's full remote-write URL (…/workspaces/ws-…/api/v1/remote_write) — the manifests hand it to the
+    Pass the workspace's full remote-write URL (…/workspaces/ws-…/api/v1/remote_write) - the manifests hand it to the
     prometheusremotewrite exporter verbatim.
   EOT
   type = object({
@@ -544,7 +600,7 @@ variable "patchy" {
     claude-runner traffic against, published as the CLAUDE_* cluster vars (CLAUDE_PROVIDER, CLAUDE_ANTHROPIC_AUTH,
     CLAUDE_BEDROCK_REGION, CLAUDE_BEDROCK_REGION_PREFIX, CLAUDE_VERTEX_REGION, CLAUDE_VERTEX_PROJECT_ID,
     CLAUDE_MODEL_MAP). Keys are harness-scoped (CLAUDE_*, not a generic PROVIDER_*) and the knobs provider-prefixed
-    (bedrock_region, not a bare region) — clarity over brevity, mirroring the broker's own PATCHY_BEDROCK_* env names.
+    (bedrock_region, not a bare region) - clarity over brevity, mirroring the broker's own PATCHY_BEDROCK_* env names.
     When the provider is bedrock the broker's KSA additionally gets the Bedrock invoke grant (iam.tf).
     evaluation.enabled deploys the evaluation controller -- the evolve-facing remote-evaluation API plus the runners
     that execute submitted evaluation units -- published as the PATCHY_EVALUATION cluster var. It requires sso (the API

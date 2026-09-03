@@ -1,7 +1,7 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 
-# Cilium in ENI mode — the CNI, the kube-proxy replacement and the Gateway API
+# Cilium in ENI mode - the CNI, the kube-proxy replacement and the Gateway API
 # implementation, with the AWS VPC CNI never installed.
 #
 # ENI mode rather than an overlay because pods must hold routable VPC
@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "cilium_eni" {
 }
 
 # By default these permissions sit on the NODE role, not on a Pod Identity
-# association — and that is a bootstrap ordering decision, not an oversight.
+# association - and that is a bootstrap ordering decision, not an oversight.
 # In ENI mode the Cilium agent cannot report ready until the operator has
 # attached ENIs and populated the CiliumNode, so the operator needs credentials
 # while the first node group is still coming up; the eks-pod-identity-agent
@@ -121,7 +121,7 @@ resource "aws_iam_role_policy" "cilium_eni" {
 resource "aws_iam_role" "cilium_operator" {
   count = var.cilium.operator_pod_identity ? 1 : 0
 
-  name               = "${var.name}-cilium-operator"
+  name_prefix        = "${var.name}-cilium-operator-"
   description        = "Cilium operator (${var.name}) - ENI attachment and address management"
   assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role.json
 
@@ -159,7 +159,7 @@ resource "helm_release" "cilium" {
 
   values = [yamlencode(merge(local.cilium_values, var.cilium.helm_values))]
 
-  # There are no nodes yet — that is the point. The objects land in the API
+  # There are no nodes yet - that is the point. The objects land in the API
   # server so the agent starts the instant the first node registers; waiting
   # for readiness here would deadlock against the node group that depends on
   # this release.

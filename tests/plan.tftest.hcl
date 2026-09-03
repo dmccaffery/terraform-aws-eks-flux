@@ -34,8 +34,8 @@ mock_provider "aws" {
   }
 
   # Without a default the mocked json attribute is a random string, which every
-  # assume_role_policy then rejects as invalid. These tests assert IAM wiring —
-  # which role, which association — not policy contents, so an empty document
+  # assume_role_policy then rejects as invalid. These tests assert IAM wiring - 
+  # which role, which association - not policy contents, so an empty document
   # is enough.
   mock_data "aws_iam_policy_document" {
     defaults = {
@@ -144,6 +144,40 @@ run "public_access_constrained_to_cidrs" {
   }
 }
 
+run "default_security_group_restriction" {
+  command = plan
+
+  variables {
+    network = {
+      vpc_id                          = "vpc-0123456789abcdef0"
+      node_subnet_ids                 = ["subnet-0aaa", "subnet-0bbb"]
+      public_subnet_ids               = ["subnet-0ccc", "subnet-0ddd"]
+      restrict_default_security_group = true
+    }
+  }
+
+  assert {
+    condition     = length(aws_vpc_security_group_egress_rule.default_self) == 4 && length(terraform_data.revoke_default_egress) == 1
+    error_message = "restrict_default_security_group must pin the minimum egress rules onto the EKS-managed group and schedule the allow-all revoke"
+  }
+
+  assert {
+    condition = toset([
+      for rule in aws_vpc_security_group_egress_rule.default_self : "${rule.ip_protocol}/${rule.from_port}"
+    ]) == toset(["tcp/443", "tcp/10250", "tcp/53", "udp/53"])
+    error_message = "the pinned egress must be exactly the documented minimum: 443 and 10250 (TCP) and 53 (TCP+UDP) to self"
+  }
+}
+
+run "default_security_group_untouched_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_vpc_security_group_egress_rule.default_self) == 0 && length(terraform_data.revoke_default_egress) == 0
+    error_message = "without restrict_default_security_group the EKS-managed group must not be touched"
+  }
+}
+
 run "cilium_is_the_cni" {
   command = plan
 
@@ -154,7 +188,7 @@ run "cilium_is_the_cni" {
 
   assert {
     condition     = local.cilium_values.routingMode == "native"
-    error_message = "ENI mode requires native routing — tunnelling would defeat the point of VPC-addressed pods"
+    error_message = "ENI mode requires native routing - tunnelling would defeat the point of VPC-addressed pods"
   }
 
   assert {
@@ -174,7 +208,7 @@ run "cilium_is_the_cni" {
 
   assert {
     condition     = length(aws_iam_role_policy.cilium_eni) == 1
-    error_message = "by default the ENI permissions sit on the node role — Pod Identity there is a bootstrap cycle (the agent add-on only installs once nodes exist)"
+    error_message = "by default the ENI permissions sit on the node role - Pod Identity there is a bootstrap cycle (the agent add-on only installs once nodes exist)"
   }
 
   assert {
@@ -187,22 +221,84 @@ run "node_group_gates_on_cilium" {
   command = plan
 
   assert {
-    condition     = aws_eks_node_group.system.labels["role"] == "system"
+    condition     = module.system_node_group.labels["role"] == "system"
     error_message = "the system node group must carry the role=system label platform controllers pin to"
   }
 
   assert {
-    condition = one([
-      for taint in aws_eks_node_group.system.taint :
-      taint if taint.key == "node.cilium.io/agent-not-ready" && taint.effect == "NO_EXECUTE"
-    ]) != null
+    condition = anytrue([
+      for taint in module.system_node_group.taints :
+      taint.key == "node.cilium.io/agent-not-ready" && taint.effect == "NO_EXECUTE"
+    ])
     error_message = "nodes must be tainted until Cilium can address pods; the Cilium operator removes the taint once its agent is ready"
+  }
+}
+
+run "additional_node_groups" {
+  command = plan
+
+  variables {
+    node_groups = {
+      workers = {
+        labels = { role = "workers" }
+      }
+      win = {
+        ami_type = "WINDOWS_CORE_2022_x86_64"
+      }
+    }
   }
 
   assert {
-    condition     = aws_eks_node_group.system.node_repair_config[0].enabled == true
-    error_message = "node auto-repair must be on"
+    condition = anytrue([
+      for taint in module.node_group["workers"].taints :
+      taint.key == "node.cilium.io/agent-not-ready" && taint.effect == "NO_EXECUTE"
+    ])
+    error_message = "Linux node groups must carry the Cilium bootstrap taint exactly like the system group"
   }
+
+  assert {
+    condition = !anytrue([
+      for taint in module.node_group["win"].taints :
+      taint.key == "node.cilium.io/agent-not-ready"
+    ])
+    error_message = "Windows nodes run no Cilium agent, so the bootstrap taint would never be removed and must not be applied"
+  }
+
+  assert {
+    condition     = module.node_group["workers"].labels["role"] == "workers"
+    error_message = "node group labels must pass through to the nodes"
+  }
+
+  assert {
+    condition     = length(aws_iam_role.nodes_windows) == 1 && aws_eks_access_entry.nodes_windows["true"].type == "EC2_WINDOWS"
+    error_message = "a WINDOWS_* group must elect the dedicated windows node role and its EC2_WINDOWS access entry into existence - an IAM principal carries exactly one access entry, so the Linux role cannot serve"
+  }
+
+  assert {
+    condition     = length(local.registry_reader_principals) == 7
+    error_message = "the windows node role pulls images too, so it must join the registry reader principals"
+  }
+}
+
+run "no_windows_machinery_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_iam_role.nodes_windows) == 0 && length(aws_eks_access_entry.nodes_windows) == 0
+    error_message = "without a WINDOWS_* node group, no windows role or access entry may exist"
+  }
+}
+
+run "node_groups_reject_the_system_key" {
+  command = plan
+
+  variables {
+    node_groups = {
+      system = {}
+    }
+  }
+
+  expect_failures = [var.node_groups]
 }
 
 run "node_role_has_no_vpc_cni_policy" {
@@ -316,7 +412,7 @@ run "cluster_vars_contract" {
 
   assert {
     condition     = !contains(keys(local.reserved_cluster_vars), "CLOUD")
-    error_message = "the manifests are per-cloud trees (flux.sync.path selects aws) — nothing may publish or branch on a CLOUD var"
+    error_message = "the manifests are per-cloud trees (flux.sync.path selects aws) - nothing may publish or branch on a CLOUD var"
   }
 
   assert {
@@ -479,7 +575,7 @@ run "claude_bedrock_provider" {
 
   assert {
     condition     = local.reserved_cluster_vars.CLAUDE_MODEL_MAP == "anthropic/claude-opus-5=us.anthropic.claude-opus-5,anthropic/claude-sonnet-5=us.anthropic.claude-sonnet-5"
-    error_message = "the model map arrives as comma-joined sorted canonical=providerID pairs — the flat-string list pattern the stack already proves"
+    error_message = "the model map arrives as comma-joined sorted canonical=providerID pairs - the flat-string list pattern the stack already proves"
   }
 
   # bedrock is the one provider needing cloud credentials, so it alone brings
@@ -546,6 +642,27 @@ run "keyless_mode_gets_no_kms_grant" {
 run "karpenter_node_pool_shape" {
   command = plan
 
+  # name_prefix makes the generated names unknown until apply; pin them so
+  # the contract assertions below can compare the published cluster vars
+  # against the source attributes exactly.
+  override_resource {
+    target          = aws_iam_role.karpenter_node
+    override_during = plan
+    values = {
+      name = "patchy-x-karpenter-node-20260903"
+      arn  = "arn:aws:iam::123456789012:role/patchy-x-karpenter-node-20260903"
+    }
+  }
+
+  override_resource {
+    target          = aws_sqs_queue.karpenter_interruption
+    override_during = plan
+    values = {
+      name = "patchy-x-karpenter-interruption-20260903"
+      arn  = "arn:aws:sqs:eu-west-2:123456789012:patchy-x-karpenter-interruption-20260903"
+    }
+  }
+
   assert {
     condition     = local.reserved_cluster_vars.KARPENTER_CAPACITY_TYPES == "spot,on-demand"
     error_message = "the default NodePool takes spot first with on-demand as fallback"
@@ -558,7 +675,7 @@ run "karpenter_node_pool_shape" {
 
   assert {
     condition     = local.reserved_cluster_vars.KARPENTER_MEMORY_LIMIT == "256Gi"
-    error_message = "the memory ceiling must carry its Gi unit — it lands directly in the NodePool's spec.limits"
+    error_message = "the memory ceiling must carry its Gi unit - it lands directly in the NodePool's spec.limits"
   }
 
   assert {
@@ -586,7 +703,7 @@ run "empty_election_publishes_none" {
 
   assert {
     condition     = local.reserved_cluster_vars.STACK_COMPONENTS == "none"
-    error_message = "an explicitly empty election must publish the reserved name none — an empty string would re-trigger the manifests' elect-everything default"
+    error_message = "an explicitly empty election must publish the reserved name none - an empty string would re-trigger the manifests' elect-everything default"
   }
 }
 
@@ -620,7 +737,7 @@ run "dns_and_gateway_surface" {
     error_message = "the public zone is unconditional with dns.zone_name, and the private id stays empty without the split-horizon election"
   }
 
-  # One EIP per public subnet the Gateway's NLB spans — an NLB requirement, not
+  # One EIP per public subnet the Gateway's NLB spans - an NLB requirement, not
   # a per-host one. Every HTTPRoute hostname shares them.
   assert {
     condition     = length(aws_eip.gateway) == length(var.network.public_subnet_ids)
@@ -653,7 +770,7 @@ run "dns_split_horizon" {
 
   assert {
     condition     = local.dns_zone_kinds[0] == "public"
-    error_message = "the public zone is unconditional — it must lead the flavour list, private riding alongside by election"
+    error_message = "the public zone is unconditional - it must lead the flavour list, private riding alongside by election"
   }
 
   assert {
@@ -738,7 +855,7 @@ run "sso_surface" {
 
   assert {
     condition     = local.reserved_cluster_vars.STACK_COMPONENTS == "dex,flux-web,patchy"
-    error_message = "dex is not elected directly — it joins the election exactly when sso is on"
+    error_message = "dex is not elected directly - it joins the election exactly when sso is on"
   }
 
   assert {
@@ -937,7 +1054,7 @@ run "rbac_access_entries" {
     error_message = "the access entry maps the IAM principal onto the Kubernetes group the manifests bind"
   }
 
-  # The manifests bind group NAMES — never the IAM principals behind them.
+  # The manifests bind group NAMES - never the IAM principals behind them.
   assert {
     condition     = local.reserved_cluster_vars.RBAC_GROUP_ADMINS == "platform:admins"
     error_message = "RBAC_GROUP_* must publish the Kubernetes group names, not the principal ARNs"

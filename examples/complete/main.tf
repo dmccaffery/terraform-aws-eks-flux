@@ -81,7 +81,7 @@ module "cluster" {
 
   cluster_admin_principals = var.cluster_admin_principals
 
-  system_node_pool = {
+  system_node_group = {
     instance_types = ["m7i.large"]
     min_size       = 2
     max_size       = 4
@@ -89,7 +89,7 @@ module "cluster" {
 
   # Workload capacity. Spot first, on-demand as the fallback; the ceilings are
   # what the manifests render into the NodePool's spec.limits. There is no
-  # minimum — Karpenter scales from zero, and system_node_pool.min_size is the
+  # minimum - Karpenter scales from zero, and system_node_group.min_size is the
   # cluster's floor.
   karpenter = {
     node_pool = {
@@ -160,7 +160,7 @@ module "cluster" {
 # Cluster auth is an EXEC PLUGIN, not data.aws_eks_cluster_auth. That data
 # source mints a presigned STS token valid for about 15 minutes and resolves it
 # once, whereas this apply spans cluster creation, the node group, the add-ons
-# and only then the flux chain — comfortably longer. The exec plugin shells out
+# and only then the flux chain - comfortably longer. The exec plugin shells out
 # to `aws eks get-token` when credentials are actually needed, so the token
 # cannot go stale mid-apply. It does require the AWS CLI on whatever runs
 # terraform.

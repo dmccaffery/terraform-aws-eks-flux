@@ -1,7 +1,7 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 
-# Karpenter — node auto-provisioning for workload capacity. Karpenter is not
+# Karpenter - node auto-provisioning for workload capacity. Karpenter is not
 # an EKS add-on (it is in neither the AWS nor the community catalogue); the only
 # AWS-managed Karpenter is EKS Auto Mode, which owns networking with the VPC CNI
 # and so cannot run Cilium in ENI mode.
@@ -47,7 +47,7 @@ resource "aws_ec2_tag" "cluster_security_group_discovery" {
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "karpenter_node" {
-  name               = "${var.name}-karpenter-node"
+  name_prefix        = "${var.name}-karpenter-node-"
   description        = "Karpenter-provisioned nodes (${var.name})"
   assume_role_policy = data.aws_iam_policy_document.node_assume_role.json
 
@@ -89,7 +89,7 @@ resource "aws_eks_access_entry" "karpenter_node" {
 # ---------------------------------------------------------------------------
 
 resource "aws_sqs_queue" "karpenter_interruption" {
-  name                      = "${var.name}-karpenter-interruption"
+  name_prefix               = "${var.name}-karpenter-interruption-"
   message_retention_seconds = 300
   sqs_managed_sse_enabled   = true
 
@@ -165,6 +165,10 @@ locals {
 resource "aws_cloudwatch_event_rule" "karpenter" {
   for_each = local.karpenter_events
 
+  # A fixed name, not name_prefix: rule names cap at 64 chars and the
+  # generated suffix is 26, which a max-length cluster name would overflow.
+  # Collisions need two same-named clusters in one account, which the
+  # discovery tags already forbid.
   name        = "${var.name}-karpenter-${replace(each.key, "_", "-")}"
   description = "Karpenter interruption handling (${var.name}): ${each.value.detail_type[0]}"
 
@@ -186,7 +190,7 @@ resource "aws_cloudwatch_event_target" "karpenter" {
 
 # ---------------------------------------------------------------------------
 # The controller's own identity (Pod Identity, like every other platform
-# workload — the bootstrap-cycle argument that keeps Cilium on the node role
+# workload - the bootstrap-cycle argument that keeps Cilium on the node role
 # does not apply here: Karpenter deploys through flux, long after the
 # pod-identity-agent exists).
 # ---------------------------------------------------------------------------
@@ -253,7 +257,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     resources = [aws_eks_cluster.main.arn]
   }
 
-  # Only the node role, and only onto EC2 — so a compromised controller cannot
+  # Only the node role, and only onto EC2 - so a compromised controller cannot
   # mint instances carrying a more privileged identity.
   statement {
     sid       = "PassNodeRole"
@@ -300,7 +304,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
 }
 
 resource "aws_iam_role" "karpenter_controller" {
-  name               = "${var.name}-karpenter"
+  name_prefix        = "${var.name}-karpenter-"
   description        = "Karpenter controller (${var.name})"
   assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role.json
 
