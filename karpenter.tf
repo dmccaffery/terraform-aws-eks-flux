@@ -52,6 +52,15 @@ resource "aws_iam_role" "karpenter_node" {
   assume_role_policy = data.aws_iam_policy_document.node_assume_role.json
 
   tags = var.tags
+
+  # Create-before-destroy (here and on every name_prefix identity): the
+  # controller policy document reads this role's ARN, so a plain
+  # destroy-then-create replacement wedges that deferred read between the
+  # destroys and cycles the graph. Creating the successor first keeps
+  # replacement applies (a cluster recreation, a rename) a single pass.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "karpenter_node" {
@@ -94,6 +103,10 @@ resource "aws_sqs_queue" "karpenter_interruption" {
   sqs_managed_sse_enabled   = true
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 data "aws_iam_policy_document" "karpenter_interruption" {
@@ -309,6 +322,10 @@ resource "aws_iam_role" "karpenter_controller" {
   assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy" "karpenter_controller" {

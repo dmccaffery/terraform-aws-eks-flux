@@ -111,6 +111,10 @@ resource "aws_iam_role" "nodes" {
   assume_role_policy = data.aws_iam_policy_document.node_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "nodes" {
@@ -128,6 +132,10 @@ resource "aws_iam_instance_profile" "nodes" {
   role        = aws_iam_role.nodes.name
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # The Windows role carries the same managed policies but never the Cilium ENI
@@ -141,6 +149,10 @@ resource "aws_iam_role" "nodes_windows" {
   assume_role_policy = data.aws_iam_policy_document.node_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "nodes_windows" {
@@ -171,6 +183,10 @@ resource "aws_iam_role" "cluster" {
   assume_role_policy = data.aws_iam_policy_document.cluster_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "cluster" {
@@ -461,6 +477,10 @@ resource "aws_iam_role" "ebs_csi" {
   assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role.json
 
   tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
